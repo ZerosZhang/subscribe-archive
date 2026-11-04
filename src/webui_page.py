@@ -14,6 +14,7 @@ PAGE = r"""<!DOCTYPE html>
 <title>Folo 文章归档 · 网页版</title>
 <style>
 *{box-sizing:border-box}
+:root{--cell:12px;--gap:2px}
 body{margin:0;font-family:"Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif;
      background:#f6f8fa;color:#24292f;font-size:14px}
 .wrap{max-width:1040px;margin:0 auto;padding:16px}
@@ -50,15 +51,15 @@ input[type=text]{font-family:inherit;font-size:13px;padding:5px 8px;border:1px s
 .heat-body{display:flex;gap:6px;min-width:min-content}
 .heat-left{display:flex;flex-direction:column}
 .heat-left .spacer{height:14px}
-.heat-weekdays{display:grid;grid-template-rows:repeat(7,12px);gap:2px;
+.heat-weekdays{display:grid;grid-template-rows:repeat(7,var(--cell));gap:var(--gap);
                align-items:center;justify-items:end;width:28px;font-size:10px;color:#57606a}
 .heat-right{display:flex;flex-direction:column}
-.heat-months{display:grid;grid-template-columns:repeat(53,12px);gap:2px;height:14px;
+.heat-months{display:grid;grid-auto-columns:var(--cell);gap:var(--gap);height:14px;
              font-size:10px;color:#57606a}
 .heat-months .month-label{white-space:nowrap}
-.heat-grid{display:grid;grid-template-rows:repeat(7,12px);grid-auto-flow:column;
-           grid-auto-columns:12px;gap:2px}
-.cell{width:12px;height:12px;border-radius:2px;background:#ebedf0}
+.heat-grid{display:grid;grid-template-rows:repeat(7,var(--cell));grid-auto-flow:column;
+           grid-auto-columns:var(--cell);gap:var(--gap)}
+.cell{width:var(--cell);height:var(--cell);border-radius:2px;background:#ebedf0}
 .cell.none{background:#ebedf0}
 .cell.unread{background:#2ea043}
 .cell.read{background:#0969da}
@@ -68,24 +69,19 @@ input[type=text]{font-family:inherit;font-size:13px;padding:5px 8px;border:1px s
              margin-top:8px;justify-content:flex-end;flex-wrap:wrap}
 .heat-legend .gap{width:8px}
 .heat-hint{font-size:10px;color:#57606a;text-align:right;margin-top:4px}
-/* ---------- 定时面板 ---------- */
-.note{font-size:12px;color:#57606a;background:#fff8c5;border:1px solid #d4a72c55;
-      border-radius:6px;padding:7px 10px;margin:0 0 10px}
-.sched table{border-collapse:collapse;font-size:13px}
-.sched td{padding:3px 14px 3px 0;vertical-align:top}
-.sched td.k{color:#57606a;white-space:nowrap}
-.sched .st-run{color:#1f883d;font-weight:bold}
-.sched .st-stop{color:#57606a;font-weight:bold}
+/* ---------- 常驻定时说明 ---------- */
+.sched-line{font-size:12px;color:#57606a;margin:-8px 0 14px;padding-left:2px}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>Folo 文章归档<span class="sub">网页版</span></h1>
+  <p class="sched-line" id="sched-line">每天 08:00 自动归档</p>
 
   <section class="card">
     <h2>归档进展</h2>
     <div class="heat-overview" id="heat-overview">加载中…</div>
-    <div class="heat-scroll">
+    <div class="heat-scroll" id="heat-scroll">
       <div class="heat-body">
         <div class="heat-left">
           <div class="spacer"></div>
@@ -121,12 +117,6 @@ input[type=text]{font-family:inherit;font-size:13px;padding:5px 8px;border:1px s
     </div>
     <div class="bar"><div id="bar"></div></div>
     <div class="step-times" id="step-times"></div>
-  </section>
-
-  <section class="card">
-    <h2>常驻定时</h2>
-    <p class="note" id="sched-note">加载中…</p>
-    <div class="sched" id="sched-status">加载中…</div>
   </section>
 
   <section class="card">
@@ -175,6 +165,8 @@ input[type=text]{font-family:inherit;font-size:13px;padding:5px 8px;border:1px s
 
   /* ---------------- 热力图（阅读状态日历） ---------------- */
   var WEEKDAY_LABELS = ["周一", "", "周三", "", "周五", "", ""];
+  var heatData = null;
+  var heatResizeTimer = 0;
   function initWeekdays(){
     var html = "";
     for(var i = 0; i < 7; i++){ html += "<div>" + WEEKDAY_LABELS[i] + "</div>"; }
@@ -219,24 +211,43 @@ input[type=text]{font-family:inherit;font-size:13px;padding:5px 8px;border:1px s
   }
 
   function renderHeatmap(days, total, recent30, readDays){
+    heatData = { days: days, total: total, recent30: recent30, readDays: readDays };
     el("heat-overview").textContent =
       "共归档 " + total + " 篇 · 最近 30 天 " + recent30 + " 篇 · 已读 " + readDays + " 天";
+
+    // 按可用宽度决定格子和周数：桌面铺满 53 周，平板/手机只显示半年以内，避免横向滚动
+    var cell = window.innerWidth <= 520 ? 10 : 12;
+    var gap = 2;
+    var avail = el("heat-scroll").clientWidth || (window.innerWidth - 60);
+    var weeks = Math.floor((avail - 34 + gap) / (cell + gap));
+    if(window.innerWidth < 900){ weeks = Math.min(weeks, 26); }
+    weeks = Math.max(10, Math.min(53, weeks));
+
+    document.documentElement.style.setProperty("--cell", cell + "px");
+    document.documentElement.style.setProperty("--gap", gap + "px");
+
     var grid = el("heat-grid"), months = el("heat-months");
     grid.innerHTML = ""; months.innerHTML = "";
+    months.style.gridTemplateColumns = "repeat(" + weeks + "," + cell + "px)";
     var today = new Date(); today.setHours(0,0,0,0);
     var dow = (today.getDay() + 6) % 7;                 // 周一 = 0
     var monday = new Date(today); monday.setDate(today.getDate() - dow);
-    var start = new Date(monday); start.setDate(monday.getDate() - 52*7);
+    var start = new Date(monday); start.setDate(monday.getDate() - (weeks - 1)*7);
     var lastMonth = -1;
-    for(var col = 0; col < 53; col++){
+    var lastLabelCol = -99;
+    for(var col = 0; col < weeks; col++){
       var cm = new Date(start); cm.setDate(start.getDate() + col*7);
       if(cm.getMonth() !== lastMonth){
         lastMonth = cm.getMonth();
-        var lab = document.createElement("div");
-        lab.className = "month-label";
-        lab.style.gridColumn = String(col + 1);
-        lab.textContent = (cm.getMonth() + 1) + "月";
-        months.appendChild(lab);
+        // 标签有宽度：太挤（<4 列）或贴近右边缘时不画，避免重叠和溢出
+        if(col - lastLabelCol >= 4 && col <= weeks - 3){
+          lastLabelCol = col;
+          var lab = document.createElement("div");
+          lab.className = "month-label";
+          lab.style.gridColumn = String(col + 1);
+          lab.textContent = (cm.getMonth() + 1) + "月";
+          months.appendChild(lab);
+        }
       }
       for(var row = 0; row < 7; row++){
         var d = new Date(cm); d.setDate(cm.getDate() + row);
@@ -310,30 +321,17 @@ input[type=text]{font-family:inherit;font-size:13px;padding:5px 8px;border:1px s
     });
   }
 
-  /* ---------------- 常驻定时面板 ---------------- */
-  var SCHED_NOTES = {
-    webui: "定时由本网页版进程负责；关闭网页版即停止定时。也可改用 python src/scheduler.py 独立运行（两者互斥，不会重复）。",
-    external: "已检测到外部调度器（scheduler.py），本进程不再重复调度。",
-    disabled: "内建定时已关闭（--no-schedule 或 config.json 里 schedule.enabled=false）。"
+  /* ---------------- 常驻定时（一行说明） ---------------- */
+  var SCHED_LINES = {
+    webui: "常驻定时：每天 {time} 自动归档（由本进程负责）",
+    external: "常驻定时：每天 {time} 自动归档（由外部调度器负责）",
+    disabled: "常驻定时未启用（config.json 里 schedule.enabled=false）"
   };
   function renderSchedule(s){
     s = s || {};
     var owner = s.owner || (s.running ? "external" : "disabled");
-    var label, cls;
-    if(owner === "webui"){ label = "由本进程负责（运行中）"; cls = "st-run"; }
-    else if(owner === "external"){ label = "由外部调度器负责"; cls = "st-run"; }
-    else { label = "未启用"; cls = "st-stop"; }
-    var statusHtml = '<span class="' + cls + '">● ' + label + '</span>';
-    var timeHtml = escapeHtml(s.time || "08:00") +
-      (s.enabled === false ? '（已在 config.json 中关闭）' : '');
-    var rows = [ ["状态", statusHtml], ["设定时刻", timeHtml] ];
-    var html = "<table>";
-    rows.forEach(function(r){
-      html += "<tr><td class=\"k\">" + r[0] + "</td><td>" + r[1] + "</td></tr>";
-    });
-    html += "</table>";
-    el("sched-status").innerHTML = html;
-    el("sched-note").textContent = SCHED_NOTES[owner] || SCHED_NOTES.disabled;
+    var text = SCHED_LINES[owner] || SCHED_LINES.disabled;
+    el("sched-line").textContent = text.replace("{time}", s.time || "08:00");
   }
   function refreshSchedule(force){
     fetch("/api/schedule" + (force ? "?refresh=1" : ""))
@@ -360,6 +358,14 @@ input[type=text]{font-family:inherit;font-size:13px;padding:5px 8px;border:1px s
     fetch("/api/stop", { method: "POST" })
       .then(function(r){ return r.json(); })
       .catch(function(){});
+  });
+
+  /* ---------------- 窗口尺寸变化后按新宽度重排热力图 ---------------- */
+  window.addEventListener("resize", function(){
+    if(heatResizeTimer){ clearTimeout(heatResizeTimer); }
+    heatResizeTimer = setTimeout(function(){
+      if(heatData){ renderHeatmap(heatData.days, heatData.total, heatData.recent30, heatData.readDays); }
+    }, 150);
   });
 
   /* ---------------- 启动轮询 ---------------- */
