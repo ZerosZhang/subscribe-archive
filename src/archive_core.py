@@ -274,7 +274,7 @@ def _write_index_page(today, index_path, entries):
             parts.append(f'<li class="index-item">{anchor}{body}</li>')
         parts.append("</ul>")
 
-    # 热榜（archive=false 的订阅）：只列标题和原文链接，不参与下载
+    # 热榜（archive=false 的订阅）：接着正文分组继续编号，只列标题和原文链接
     try:
         from watch_export import list_trend_entries
         trend_feeds = list_trend_entries(limit=5, date=today)
@@ -282,23 +282,28 @@ def _write_index_page(today, index_path, entries):
         print(f"⚠️  热榜条目读取失败：{exc}")
         trend_feeds = []
 
-    if trend_feeds:
-        parts.append('<h2 class="index-source">热榜（仅链接）</h2>')
-        for feed in trend_feeds:
-            parts.append(f'<h3 class="index-source">{html_escape(feed["name"])}</h3>')
-            parts.append('<ul class="index-list">')
-            for item in feed["entries"]:
-                when = (item.get("published") or "").replace("T", " ")[:16]
-                parts.append(
-                    '<li class="index-item">'
-                    f'<a href="{html_escape(item.get("link") or "", quote=True)}"'
-                    f' target="_blank" rel="noopener noreferrer">'
-                    f'{html_escape(item.get("title") or "无标题")}</a>'
-                    f'<div class="digest">原文：{html_escape(item.get("link") or "")}'
-                    f'{(" · " + html_escape(when)) if when else ""}</div>'
-                    '</li>'
-                )
-            parts.append('</ul>')
+    next_index = len(sorted_sources)
+    for feed in trend_feeds:
+        num = chinese_nums[next_index] if next_index < len(chinese_nums) else str(next_index + 1)
+        parts.append(
+            f'<h2 class="index-source">{num}、{html_escape(feed["name"])}'
+            f'（{len(feed["entries"])} 条 · 仅链接）</h2>'
+        )
+        parts.append('<ul class="index-list">')
+        for item in feed["entries"]:
+            when = (item.get("published") or "").replace("T", " ")[:16]
+            parts.append(
+                '<li class="index-item">'
+                f'<a href="{html_escape(item.get("link") or "", quote=True)}"'
+                f' target="_blank" rel="noopener noreferrer">'
+                f'{html_escape(item.get("title") or "无标题")}</a>'
+                f'<div class="digest">原文：{html_escape(item.get("link") or "")}'
+                f'{(" · " + html_escape(when)) if when else ""}</div>'
+                '</li>'
+            )
+        parts.append('</ul>')
+        next_index += 1
+
     page = render_document(f"{today} 归档", "\n".join(parts))
     write_style_sheet(index_path.parent)
     index_path.write_text(page, encoding="utf-8")
