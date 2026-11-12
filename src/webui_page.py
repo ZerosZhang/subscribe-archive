@@ -24,6 +24,8 @@ h1 .sub{font-size:12px;font-weight:normal;color:#57606a;border:1px solid #d0d7de
 .card{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:12px 14px;margin-bottom:14px}
 .layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px;align-items:start}
 .layout > .card{margin-bottom:0}
+.right-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.right-col > .card{margin-bottom:0}
 @media (max-width:900px){
   .layout{grid-template-columns:1fr}
   .layout > .card{margin-bottom:14px}
@@ -40,7 +42,6 @@ button.danger{color:#cf222e;padding:6px 12px;font-size:13px;white-space:nowrap}
 input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px solid #d0d7de;border-radius:6px}
 .steps{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .steps label{font-size:13px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
-.skip-ai{display:flex;align-items:center;gap:6px;font-size:13px;color:#57606a;margin:2px 0 10px;cursor:pointer}
 .bar{height:14px;background:#eaeef2;border-radius:7px;overflow:hidden;margin:10px 0}
 .bar > div{height:100%;width:0;background:#1f883d;transition:width .3s ease}
 #status{font-size:13px;color:#57606a}
@@ -83,7 +84,13 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
 .linkbtn + .linkbtn{margin-right:12px}
 .last-line{color:#1f883d}
 .last-line.err-line{color:#cf222e}
+.feed-alert{font-size:13px;color:#cf222e;margin:0;padding:10px 14px;
+            background:#fff;border:1px solid #ffcecb;border-radius:8px;line-height:1.6}
+.feed-alert a{color:#cf222e}
 .err-line{color:#cf222e}
+.feed-alert{font-size:13px;color:#cf222e;margin:0;padding:10px 14px;
+            background:#fff;border:1px solid #ffcecb;border-radius:8px;line-height:1.6}
+.feed-alert a{color:#cf222e}
 </style>
 </head>
 <body>
@@ -94,7 +101,6 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
   </h1>
   <p class="sched-line" id="sched-line">每天 08:00 自动归档</p>
   <p class="sched-line last-line" id="last-line">上次运行：暂无记录</p>
-  <p class="sched-line err-line" id="feed-alert" style="display:none"></p>
 
   <div class="layout">
   <section class="card">
@@ -120,10 +126,10 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
     <div class="heat-hint">单击日期：在新标签页打开当天总览并标记为已读；Shift/Alt + 单击：只切换已读状态。</div>
   </section>
 
+  <div class="right-col">
   <section class="card">
     <h2>手动执行</h2>
     <div class="steps" id="steps"></div>
-    <label class="skip-ai"><input type="checkbox" id="skip-ai"> 跳过 AI 摘要（只生成索引页，不消耗 API）</label>
     <div class="row">
       <button id="start" class="primary">开始执行</button>
       <button id="stop" disabled>停止</button>
@@ -132,6 +138,8 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
     <div class="bar"><div id="bar"></div></div>
     <div class="step-times" id="step-times"></div>
   </section>
+  <p class="feed-alert" id="feed-alert" style="display:none"></p>
+  </div>
   </div>
 </div>
 
@@ -388,7 +396,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
   });
 
   el("start").addEventListener("click", function(){
-    var payload = { steps: selectedSteps(), skip_ai: el("skip-ai").checked };
+    var payload = { steps: selectedSteps() };
     fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -444,6 +452,8 @@ h1 .sub{font-size:12px;font-weight:normal;color:#57606a;border:1px solid #d0d7de
 .card{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:12px 14px;margin-bottom:14px}
 .layout{display:grid;grid-template-columns:minmax(0,1.1fr) minmax(0,1fr);gap:14px;align-items:start}
 .layout > .card{margin-bottom:0}
+.right-col{display:flex;flex-direction:column;gap:10px;min-width:0}
+.right-col > .card{margin-bottom:0}
 @media (max-width:900px){
   .layout{grid-template-columns:1fr}
   .layout > .card{margin-bottom:14px}

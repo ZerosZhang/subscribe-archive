@@ -118,8 +118,7 @@ def _index_entry(source, display, filename, url, summary, status, note):
     }
 
 
-def _build_index_entries(today, article_list, summary_by_file, failure_by_file, missing_notes,
-                         skip_ai=False):
+def _build_index_entries(today, article_list, summary_by_file, failure_by_file, missing_notes):
     """组装索引页条目：以文章列表 JSON 为准，逐条判定本地归档状态
 
     每条结构: {source, display_title, filename, url, summary, status, note}
@@ -159,8 +158,6 @@ def _build_index_entries(today, article_list, summary_by_file, failure_by_file, 
             if result is not None:
                 entries.append(_index_entry(source, display, name, url,
                                             result.get("summary", ""), "ok", ""))
-            elif skip_ai:
-                entries.append(_index_entry(source, display, name, url, "", "ok", ""))
             else:
                 error = failure_by_file.get(name) or "未生成摘要"
                 entries.append(_index_entry(source, display, name, url, "",
@@ -178,8 +175,6 @@ def _build_index_entries(today, article_list, summary_by_file, failure_by_file, 
         result = summary_by_file.get(name)
         if result is not None:
             entries.append(_index_entry(source, display, name, "", result.get("summary", ""), "ok", ""))
-        elif skip_ai:
-            entries.append(_index_entry(source, display, name, "", "", "ok", ""))
         else:
             error = failure_by_file.get(name) or "未生成摘要"
             entries.append(_index_entry(source, display, name, "", "",
@@ -188,7 +183,7 @@ def _build_index_entries(today, article_list, summary_by_file, failure_by_file, 
     return entries
 
 
-def _build_entries_from_files(html_files, summary_by_file, failure_by_file, skip_ai=False):
+def _build_entries_from_files(html_files, summary_by_file, failure_by_file):
     """回退路径：没有文章列表 JSON 时，按成品文件组装索引条目"""
     entries = []
     for html_file in html_files:
@@ -197,8 +192,6 @@ def _build_entries_from_files(html_files, summary_by_file, failure_by_file, skip
         result = summary_by_file.get(name)
         if result is not None:
             entries.append(_index_entry(source, display, name, "", result.get("summary", ""), "ok", ""))
-        elif skip_ai:
-            entries.append(_index_entry(source, display, name, "", "", "ok", ""))
         else:
             error = failure_by_file.get(name) or "未生成摘要"
             entries.append(_index_entry(source, display, name, "", "",
@@ -310,7 +303,7 @@ def _write_index_page(today, index_path, entries):
 
 
 def _summarize_step(today, log, article_list=None, missing_notes=None, should_stop=None,
-                    force=False, skip_ai=False):
+                    force=False):
     """步骤 4：AI 生成文章摘要并生成当日索引页
 
     已有摘要的文章默认跳过（断点续跑，只补没摘要的那几篇）；force=True 时全部重算。
@@ -339,19 +332,13 @@ def _summarize_step(today, log, article_list=None, missing_notes=None, should_st
     processed = 0
     skipped = 0
 
-    config = None
-    if skip_ai:
-        log("已选择跳过 AI 摘要，只生成索引页")
-    else:
-        try:
-            config = load_config()
-        except SystemExit:
-            config = None
-            log("⚠️  未找到 config.json 或配置无效，本次不生成 AI 摘要（索引页仍会生成）")
+    try:
+        config = load_config()
+    except SystemExit:
+        config = None
+        log("⚠️  未找到 config.json 或配置无效，本次不生成 AI 摘要（索引页仍会生成）")
 
-    if skip_ai:
-        pass
-    elif not html_files:
+    if not html_files:
         log("⚠️  没有找到可总结的 .html 文件，索引页将按文章列表生成并标注缺失项")
     elif config is None:
         for html_file in html_files:
@@ -398,10 +385,10 @@ def _summarize_step(today, log, article_list=None, missing_notes=None, should_st
 
     if article_list:
         entries = _build_index_entries(today, article_list, summary_by_file,
-                                       failure_by_file, missing_notes, skip_ai=skip_ai)
+                                       failure_by_file, missing_notes)
     else:
         log("⚠️  未找到文章列表 JSON，索引页回退为按成品文件生成")
-        entries = _build_entries_from_files(html_files, summary_by_file, failure_by_file, skip_ai=skip_ai)
+        entries = _build_entries_from_files(html_files, summary_by_file, failure_by_file)
 
     log("\n正在生成索引页...")
     index_path = folder / f"{today}.html"
@@ -421,8 +408,7 @@ def _summarize_step(today, log, article_list=None, missing_notes=None, should_st
             "index_error": index_error}
 
 
-def run_archive(selected_steps, today, log, on_progress=None, should_stop=None,
-                skip_ai=False):
+def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):
     """执行归档流程
 
     参数:
@@ -577,8 +563,7 @@ def run_archive(selected_steps, today, log, on_progress=None, should_stop=None,
             on_progress(80, "步骤 4: AI 摘要...")
 
         step_start = time.time()
-        summary_result = _summarize_step(today, log, article_list, missing_notes, should_stop,
-                                         skip_ai=skip_ai)
+        summary_result = _summarize_step(today, log, article_list, missing_notes, should_stop)
         step_times[4] = time.time() - step_start
         log(f"  ⏱ 耗时: {format_duration(step_times[4])}")
 

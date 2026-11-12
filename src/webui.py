@@ -212,7 +212,7 @@ def _save_last_run(date_str, result):
         LOG.append(f"⚠️ 上次运行摘要写入失败: {exc}")
 
 
-def _run_worker(steps, date_str, skip_ai=False):
+def _run_worker(steps, date_str):
     """后台线程：执行归档 → 刷新状态 → 失败通知"""
     result = None
     try:
@@ -224,7 +224,6 @@ def _run_worker(steps, date_str, skip_ai=False):
             log=LOG.append,
             on_progress=_on_progress,
             should_stop=_should_stop,
-            skip_ai=skip_ai,
         )
     except Exception as exc:  # noqa: BLE001 - 任何异常都只记日志，线程必须干净退出
         LOG.append(f"❌ 发生错误: {exc}")
@@ -347,7 +346,7 @@ def _normalize_steps(raw):
     return sorted(out)
 
 
-def start_run(steps, date_str=None, skip_ai=False):
+def start_run(steps, date_str=None):
     """校验并启动后台归档线程，返回 (ok, error)
 
     date_str 省略时一律归档今天（网页端不再提供日期选择）。
@@ -369,9 +368,8 @@ def start_run(steps, date_str=None, skip_ai=False):
         _STATE["progress_text"] = "准备中…"
         _STATE["step_times"] = {}
 
-    LOG.append(f"[WebUI] 开始执行：步骤 {steps}，日期 {date_str}"
-               + ("（跳过 AI 摘要）" if skip_ai else ""))
-    threading.Thread(target=_run_worker, args=(steps, date_str, skip_ai), daemon=True).start()
+    LOG.append(f"[WebUI] 开始执行：步骤 {steps}，日期 {date_str}")
+    threading.Thread(target=_run_worker, args=(steps, date_str), daemon=True).start()
     return True, None
 
 
@@ -831,8 +829,7 @@ class Handler(BaseHTTPRequestHandler):
         body = self._read_json()
 
         if path == "/api/run":
-            ok, error = start_run(body.get("steps"), body.get("date"),
-                                  bool(body.get("skip_ai")))
+            ok, error = start_run(body.get("steps"), body.get("date"))
             return self._send_json({"ok": ok, "error": error})
         if path == "/api/stop":
             return self._send_json({"ok": request_stop()})
