@@ -271,13 +271,6 @@ def _write_index_page(today, index_path, entries):
             else:
                 body = f'<div class="digest">{_summary_digest(entry.get("summary"))}</div>'
 
-            # 每条都给出原文入口（本地 HTML 只是正文快照，评论/回复只在原站）
-            if entry.get("url"):
-                safe_url = html_escape(entry["url"], quote=True)
-                body += ('<div class="digest index-origin">'
-                         f'<a href="{safe_url}" target="_blank" rel="noopener noreferrer">'
-                         '查看原文 ↗</a></div>')
-
             parts.append(f'<li class="index-item">{anchor}{body}</li>')
         parts.append("</ul>")
 
