@@ -16,7 +16,6 @@ PAGE = r"""<!DOCTYPE html>
 *{box-sizing:border-box}
 :root{--cell:12px;--gap:2px}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-     font-family:"Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif;
      background:#f6f8fa;color:#24292f;font-size:14px}
 .wrap{width:100%;max-width:1180px;margin:auto;padding:16px}
 h1{font-size:20px;margin:10px 0 16px}
@@ -46,7 +45,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
 .bar > div{height:100%;width:0;background:#1f883d;transition:width .3s ease}
 #status{font-size:13px;color:#57606a}
 .step-times{font-size:12px;color:#57606a;white-space:pre-wrap;
-            font-family:Consolas,"Courier New",monospace;margin-top:4px}
+            font-family:monospace;margin-top:4px}
 /* ---------- 阅读状态日历 ---------- */
 .heat-overview{font-size:12px;color:#57606a;margin-bottom:10px;text-align:center}
 .cal{max-width:460px;margin:0 auto}
@@ -418,7 +417,6 @@ CONFIG_PAGE = r"""<!DOCTYPE html>
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-     font-family:"Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif;
      background:#f6f8fa;color:#24292f;font-size:14px}
 .wrap{width:100%;max-width:1180px;margin:auto;padding:16px}
 h1{font-size:20px;margin:10px 0 8px}
@@ -453,7 +451,7 @@ table.feeds th{text-align:left;font-weight:normal;color:#57606a;font-size:12px;
 table.feeds td{border-bottom:1px solid #eaeef2;padding:8px;vertical-align:middle}
 table.feeds tr:last-child td{border-bottom:none}
 table.feeds .name{font-weight:600;white-space:nowrap}
-table.feeds .url{font-family:Consolas,"Courier New",monospace;font-size:12px;
+table.feeds .url{font-family:monospace;font-size:12px;
                  word-break:break-all;color:#57606a;min-width:220px}
 .table-scroll{overflow-x:auto}
 .badge{display:inline-block;font-size:11px;border-radius:10px;padding:1px 8px;margin-left:6px;white-space:nowrap}
@@ -469,7 +467,7 @@ button.danger{white-space:nowrap}
       border:1px solid #eaeef2;border-radius:6px;padding:8px 10px;margin-top:8px}
 .cand-main{min-width:0}
 .cand-title{font-weight:600;font-size:13px}
-.cand .url{font-family:Consolas,"Courier New",monospace;font-size:12px;
+.cand .url{font-family:monospace;font-size:12px;
            color:#57606a;word-break:break-all}
 </style>
 </head>
@@ -642,7 +640,6 @@ LOGS_PAGE = r"""<!DOCTYPE html>
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-     font-family:"Microsoft YaHei","Segoe UI",system-ui,-apple-system,sans-serif;
      background:#f6f8fa;color:#24292f;font-size:14px}
 .wrap{width:100%;max-width:1180px;margin:auto;padding:16px}
 h1{font-size:20px;margin:10px 0 8px}
@@ -652,7 +649,7 @@ h1{font-size:20px;margin:10px 0 8px}
 .hint{font-size:12px;color:#57606a;margin:0 0 10px}
 .hint .err{color:#cf222e}
 .log{height:calc(100vh - 140px);min-height:320px;overflow:auto;background:#0d1117;color:#c9d1d9;
-     padding:10px 12px;border-radius:8px;font-family:Consolas,"Courier New",monospace;
+     padding:10px 12px;border-radius:8px;font-family:monospace;
      font-size:12.5px;line-height:1.6;white-space:pre-wrap;word-break:break-all}
 .logline.err{color:#ff7b72}
 .logline.warn{color:#d29922}
