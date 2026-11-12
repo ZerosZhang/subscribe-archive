@@ -11,6 +11,7 @@ PAGE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico?v=2" sizes="any">
 <title>订阅归档 · 网页版</title>
 <style>
 *{box-sizing:border-box}
@@ -437,6 +438,7 @@ CONFIG_PAGE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico?v=2" sizes="any">
 <title>订阅配置 · 文章归档</title>
 <style>
 *{box-sizing:border-box}
@@ -704,6 +706,7 @@ LOGS_PAGE = r"""<!DOCTYPE html>
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="icon" href="/favicon.ico?v=2" sizes="any">
 <title>执行日志 · 订阅归档</title>
 <style>
 *{box-sizing:border-box}

@@ -45,7 +45,7 @@ sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR / "core"))
 
 # Windows 终端编码修复（必须在导入其他脚本之前执行）
-from utils import fix_encoding, CONFIG_PATH, OUTPUT_BASE_DIR, TEMP_DIR
+from utils import fix_encoding, CONFIG_PATH, OUTPUT_BASE_DIR, PYTHON_ROOT, TEMP_DIR
 
 fix_encoding()
 
@@ -787,12 +787,23 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json({"ok": False, "error": "读取归档文件失败"}, status=404)
         return self._send_bytes(data, _content_type_for(target.suffix))
 
+    # -------------------------------------------------------------- 站点图标
+    def _serve_favicon(self):
+        """GET /favicon.ico：返回项目根目录的 icon.ico，缺失时 404（浏览器自行忽略）"""
+        try:
+            data = (PYTHON_ROOT / "icon.ico").read_bytes()
+        except OSError:
+            return self._send_json({"ok": False, "error": "未找到图标"}, status=404)
+        return self._send_bytes(data, _content_type_for(".ico"))
+
     # ---------------------------------------------------------------- GET
     def do_GET(self):
         parsed = urlparse(self.path)
         path = parsed.path
         if path in ("/", "/index.html"):
             return self._send_bytes(PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        if path == "/favicon.ico":
+            return self._serve_favicon()
         if path == "/config":
             return self._send_bytes(CONFIG_PAGE.encode("utf-8"), "text/html; charset=utf-8")
         if path == "/logs":

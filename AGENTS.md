@@ -15,7 +15,7 @@
 本项目**在远程 Windows Server 上部署和测试**，不在本机运行。服务器地址、账号、SSH 别名、系统版本等全部以这份文档为准，不要凭记忆填写：
 
 ```
-D:\AgentCode\Project\「2026年10月28日」WindowsServer操作\ZerosServer连接与配置.md
+D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配置.md
 ```
 
 - **连接方式**：`ssh srv`（已配公钥免密）；传文件用 `scp 文件 srv:C:/路径/`。远程桌面用 `mstsc /v:<服务器IP>`，最多 2 个并发会话
@@ -203,6 +203,7 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - **归档日历（月视图）**：`GET /api/heatmap` 用 `heatmap.scan_daily_counts`（纯标准库模块）合并 `result/` 与 `result/归档/` 的篇数，叠加按天已读状态，返回 `{days:{日期:{"count","read"}}, total, recent30, read_days}`；前端渲染成月历（周一~周日七列，日号 + 篇数），三态上色（灰=无归档、绿=未读、蓝=已读），今天描边、未来日期淡化，「‹ 月份 ›」切换与「今天」跳转；单击在新标签页打开当天总览并标记已读，Shift/Alt+单击只切换已读
 - **手动执行不再选日期**：页面只提交 `steps`，`start_run()` 的 `date_str` 省略时取当天；CLI 的 `--date` 仍可用
 - **已读状态**：按天存 `result/read_state.json`（`{"YYYY年MM月DD日": true}`），`load_read_state()` 容错（缺失/损坏视为全部未读），`set_read_state()` 在锁内原子写入（临时文件 + `os.replace`）；接口 `POST /api/read` body `{"date","read"}` → `{ok, error}`
+- **站点图标**：`GET /favicon.ico` 返回项目根目录的 `icon.ico`（`image/x-icon`，缺失时 404 由浏览器忽略）；`webui_page.py` 三个页面（主页 / 订阅配置 / 日志）的 `<head>` 都带 `<link rel="icon" href="/favicon.ico" sizes="any">`
 - **归档静态托管**：`GET /archive/<日期>/<相对路径>` 依次在 `OUTPUT_BASE_DIR` 与 `OUTPUT_BASE_DIR/"归档"` 下按扩展名返回 HTML/图片等（`Cache-Control: no-store`）；`_resolve_archive_file()` 拒绝 NUL/绝对路径/盘符/`..`，再用 `resolve()` + `is_relative_to()` 确认不越界，越界返回 404，只读不列目录
 - **执行日志页**：`GET /logs` 返回 `LOGS_PAGE`，整屏日志并每秒增量拉取 `/api/logs`；主页不再内嵌日志，标题右侧改为入口链接
 - **上次运行摘要**：`_run_worker` 结束时 `_save_last_run()` 原子写 `result/last_run.json`（`finished_at`/`date`/`articles`/`error`/`failures`/`step_times`），`GET /api/last` 读取（缺失或损坏返回 `{}`）；主页页头第二行展示，运行结束后自动刷新
