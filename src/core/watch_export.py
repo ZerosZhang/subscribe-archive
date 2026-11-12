@@ -318,6 +318,8 @@ def check_feed(conn, feed):
         "SELECT COUNT(*) FROM entries WHERE feed_url = ?", (url,)
     ).fetchone()[0]
     first_run = known == 0
+    # archive=false：只在日志里提示新条目，不交给后续归档步骤（如只想知道热榜有什么）
+    do_archive = feed.get("archive", True) is not False
 
     articles = []
     stamp = _now_text()
@@ -329,6 +331,13 @@ def check_feed(conn, feed):
         """, (url, item["guid"], item["title"], item["link"],
               item["published"], stamp))
         if cursor.rowcount and not first_run:
+            if not do_archive:
+                articles.append({"no_archive": True, **{
+                    "title": item["title"] or "无标题",
+                    "published": item["published"],
+                    "url": item["link"],
+                }})
+                continue
             articles.append({
                 "entry_id": item["guid"],
                 "title": item["title"] or "无标题",
@@ -340,6 +349,18 @@ def check_feed(conn, feed):
 
     _save_feed_state(conn, url, feed_title, new_etag, new_modified, None, False)
     conn.commit()
+
+    if not do_archive:
+        articles = [a for a in articles if a.pop("no_archive", False)]
+        if first_run:
+            print(f"  ◐ {name}：首次检查，记录 {len(entries)} 条为基线（不归档）")
+        elif articles:
+            print(f"  ✓ {name}：{len(articles)} 条更新（仅提示，不归档）")
+            for item in sorted(articles, key=lambda a: a["published"], reverse=True):
+                print(f"      - {item['published']} {item['title']}")
+        else:
+            print(f"  · {name}：无更新")
+        return [], None
 
     if first_run:
         print(f"  ◐ {name}：首次检查，记录 {len(entries)} 条为基线（不当作更新）")

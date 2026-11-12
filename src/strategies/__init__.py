@@ -9,6 +9,8 @@ from . import sspai
 from . import appinn
 from . import iplaysoft
 from . import ruanyifeng
+from . import cnblogs
+from . import v2ex
 from . import sean
 from . import endler
 from . import echosoar

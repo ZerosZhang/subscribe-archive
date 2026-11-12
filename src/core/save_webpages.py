@@ -33,6 +33,8 @@ _PLAIN_UA = "python-requests/2.31.0"
 # 走系统代理会握手失败的网站（meta.appinn.net 经部分代理节点会
 # SSL: UNEXPECTED_EOF_WHILE_READING），这些域名改直连
 _NO_PROXY_SITES = ["meta.appinn.net"]
+# 这些站点见到 Sec-Fetch-* 头会直接 403
+_NO_SECFETCH_SITES = ["v2ex.com"]
 
 
 def sanitize_filename(name):
@@ -99,8 +101,13 @@ def fetch_url(url, timeout=30, retries=1):
         'Cache-Control': 'max-age=0',
     }
 
-    # 针对特定站点添加 referer
+    # v2ex 见到 Sec-Fetch-* 一律 403，这类站点直接不发这些头
     domain = urlparse(url).netloc
+    if any(site in domain.lower() for site in _NO_SECFETCH_SITES):
+        for key in [k for k in headers if k.lower().startswith("sec-fetch")]:
+            headers.pop(key)
+
+    # 针对特定站点添加 referer
     referrers = {
         'sspai.com': 'https://sspai.com/',
         'appinn.com': 'https://www.appinn.com/',
@@ -113,7 +120,8 @@ def fetch_url(url, timeout=30, retries=1):
             headers['Sec-Fetch-Site'] = 'same-origin'
             break
 
-    # mobius.blog 等站点用普通客户端 UA，避免被 WAF 误判为伪装浏览器而 403
+
+# mobius.blog 等站点用普通客户端 UA，避免被 WAF 误判为伪装浏览器而 403
     if any(site in domain.lower() for site in _PLAIN_UA_SITES):
         headers['User-Agent'] = _PLAIN_UA
 

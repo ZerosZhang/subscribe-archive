@@ -28,6 +28,7 @@
 
 - 状态库 `result/temp_data/watch.db`（SQLite），两张表：`feeds` 存 ETag/Last-Modified/失败状态，`entries` 存已见过的 guid
 - 去重键：优先 `id` → `link` → `标题+时间` 的 sha1
+- 订阅项可加 `"archive": false`：仍然检查更新，但只在日志里提示标题，不交给后续下载/渲染步骤（适合「只想知道热榜有什么」）
 - 首次检查某个源时**只记基线、不当作更新**，避免第一次就把历史文章全部归档
 - `discover_feeds(url)`：从任意网址找 feed——先试地址本身，再解析网页里
   `<link rel="alternate" type="application/rss+xml|atom+xml">`，最后猜 `/feed`、`/rss` 等常见路径；
