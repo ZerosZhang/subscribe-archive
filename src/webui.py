@@ -52,7 +52,7 @@ fix_encoding()
 from archive_core import STEPS      # noqa: E402
 import heatmap                      # noqa: E402
 import notify                       # noqa: E402
-from webui_page import PAGE, CONFIG_PAGE, LOGS_PAGE, TRENDS_PAGE    # noqa: E402
+from webui_page import PAGE, CONFIG_PAGE, LOGS_PAGE    # noqa: E402
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -799,10 +799,6 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_bytes(CONFIG_PAGE.encode("utf-8"), "text/html; charset=utf-8")
         if path == "/logs":
             return self._send_bytes(LOGS_PAGE.encode("utf-8"), "text/html; charset=utf-8")
-        if path == "/trends":
-            return self._send_bytes(TRENDS_PAGE.encode("utf-8"), "text/html; charset=utf-8")
-        if path == "/api/trends":
-            return self._send_json(trends_payload())
         if path == "/api/last":
             return self._send_json(load_last_run())
         if path == "/api/feeds":
@@ -891,17 +887,6 @@ def feeds_payload():
         for feed in feeds:
             feed.setdefault("strategy", "")
 
-    return {"ok": error is None, "feeds": feeds, "error": error}
-
-
-def trends_payload():
-    """热榜页数据：所有 archive=false 订阅的最新条目"""
-    try:
-        from watch_export import list_trend_entries
-        feeds = list_trend_entries()
-        error = None
-    except Exception as exc:  # noqa: BLE001 - 页面要能显示原因而不是白屏
-        feeds, error = [], f"读取热榜失败：{exc}"
     return {"ok": error is None, "feeds": feeds, "error": error}
 
 
