@@ -42,10 +42,10 @@
 
 ## 3. 新增文件清单
 
-全部放在 git 仓库根（即 `Python/`）：
+全部放在 git 仓库根：
 
 ```
-Python/
+.
 ├── Dockerfile                      # 镜像定义
 ├── docker-compose.yml              # 飞牛上直接用这个部署
 ├── .dockerignore                   # 排除 .venv/result/__pycache__

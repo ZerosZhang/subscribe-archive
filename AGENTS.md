@@ -2,7 +2,7 @@
 
 ## 技术栈
 
-- **Python 3.10+**（虚拟环境 `.venv`，依赖见 `Python/requirements.txt`：openai、feedparser）
+- **Python 3.10+**（虚拟环境 `.venv`，依赖见 `requirements.txt`：openai、feedparser）
 - **Windows**（脚本内置 UTF-8 编码修复；不依赖 bash / PowerShell，直接调用 `npx.cmd`）
 - 界面：桌面小窗口（标准库 `tkinter`，需 Python 安装时保留 tcl/tk）+ 本地网页版（标准库 `http.server`）；无数据库、无 CI/CD
 
@@ -27,9 +27,9 @@ D:\AgentCode\Project\「2026年10月28日」WindowsServer操作\ZerosServer连�
 ## 目录结构（关键路径）
 
 ```
-Python/                          # 项目根（git 仓库）
+./                              # 项目根（git 仓库）
 ├── .venv/                       # 虚拟环境（含 openai）
-├── 一键部署.bat                 # 新机器一键部署（检查 Python/Node/tkinter、建 venv、装依赖、自检）
+├── 一键部署.bat                 # 新机器一键部署（检查 Python/tkinter、建 venv、装依赖、自检）
 ├── 启动控制台.bat                 # 双击启动桌面小窗口（pythonw，无控制台黑框）
 ├── README.md                    # 公共仓库说明
 ├── doc/                         # 模块说明文档（与 src/ 结构对应）
@@ -244,7 +244,7 @@ Windows Server 无界面场景直接跑 CLI：
 - 日志默认输出到 stdout，**不会**自动写入 `result\archive.log`；需要留存请自行重定向
 - 计划任务以运行时的当前账户启动，因此能读到该账户的配置与状态库
 - 服务器上**只需** `.venv\Scripts\pip install openai`（CLI 与网页版都不需要界面库；桌面小窗口需要 tkinter）
-- 新机器部署：双击 `一键部署.bat`（检查 Python/Node/tkinter → 建/修复 venv → 装 openai → 自检 → 可选启动桌面窗口）
+- 新机器部署：双击 `一键部署.bat`（检查 Python/tkinter → 建/修复 venv → 装 openai → 自检 → 可选启动桌面窗口）
 - 失败邮件由 `archive.py` 直接发送（`notify_failures()`）
 
 ## 依赖
@@ -258,8 +258,8 @@ Windows Server 无界面场景直接跑 CLI：
 
 首次部署：
 ```bash
-python -m venv Python/.venv
-Python/.venv/Scripts/pip install -r Python/requirements.txt
+python -m venv .venv
+.venv/Scripts/pip install -r requirements.txt
 ```
 
 `config.json` 格式（模板 `src/config.example.json`；`schedule`/`mail` 均为可选项）：

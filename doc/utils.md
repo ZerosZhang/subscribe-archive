@@ -8,8 +8,8 @@
 
 | 常量 | 值 | 说明 |
 |------|----|------|
-| `PYTHON_ROOT` | `Python/` | 工具包根 |
-| `RESULT_DIR` | `Python/result/` | 数据目录 |
+| `PYTHON_ROOT` | 项目根 | 工具包根 |
+| `RESULT_DIR` | `result/` | 数据目录 |
 | `TEMP_DIR` | `result/temp_data/` | 文章列表 JSON（按日期命名） |
 | `RAW_DIR` | `result/temp_data/raw/` | 原始下载 HTML（步骤 2 → 步骤 3 的中间产物） |
 | `CONFIG_PATH` | `src/config.json` | API / 定时 / 邮件配置 |
@@ -42,4 +42,4 @@ Windows 终端 UTF-8 编码修复 + 行缓冲：
 
 ## 字节码缓存
 
-模块加载时若未设置 `PYTHONPYCACHEPREFIX`，自动将 `sys.pycache_prefix` 指向 `Python/.venv/pycache`，避免源码目录产生 `__pycache__`。
+模块加载时若未设置 `PYTHONPYCACHEPREFIX`，自动将 `sys.pycache_prefix` 指向 `.venv/pycache`，避免源码目录产生 `__pycache__`。

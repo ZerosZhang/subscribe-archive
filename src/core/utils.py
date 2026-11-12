@@ -11,12 +11,12 @@ from pathlib import Path
 
 # =============================================================================
 # 目录布局（结构变更后路径的唯一事实来源）
-#   Python/          工具包根
+#   .                项目根（git 仓库）
 #   ├── result/      数据（成品 HTML + temp_data/）
 #   ├── src/         源码（入口 + core/ + strategies/）
 #   └── .venv/       虚拟环境
 # =============================================================================
-PYTHON_ROOT = Path(__file__).resolve().parent.parent.parent  # Python/
+PYTHON_ROOT = Path(__file__).resolve().parent.parent.parent  # 项目根（src/core 往上三层）
 RESULT_DIR = PYTHON_ROOT / "result"
 TEMP_DIR = RESULT_DIR / "temp_data"                          # 文章列表 JSON
 RAW_DIR = TEMP_DIR / "raw"                                   # 原始下载 HTML（步骤 2 → 步骤 3 中间产物）
