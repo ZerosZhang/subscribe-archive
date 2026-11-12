@@ -118,7 +118,8 @@ def _index_entry(source, display, filename, url, summary, status, note):
     }
 
 
-def _build_index_entries(today, article_list, summary_by_file, failure_by_file, missing_notes):
+def _build_index_entries(today, article_list, summary_by_file, failure_by_file, missing_notes,
+                         skip_ai=False):
     """组装索引页条目：以文章列表 JSON 为准，逐条判定本地归档状态
 
     每条结构: {source, display_title, filename, url, summary, status, note}
@@ -158,6 +159,8 @@ def _build_index_entries(today, article_list, summary_by_file, failure_by_file, 
             if result is not None:
                 entries.append(_index_entry(source, display, name, url,
                                             result.get("summary", ""), "ok", ""))
+            elif skip_ai:
+                entries.append(_index_entry(source, display, name, url, "", "ok", ""))
             else:
                 error = failure_by_file.get(name) or "未生成摘要"
                 entries.append(_index_entry(source, display, name, url, "",
@@ -175,6 +178,8 @@ def _build_index_entries(today, article_list, summary_by_file, failure_by_file, 
         result = summary_by_file.get(name)
         if result is not None:
             entries.append(_index_entry(source, display, name, "", result.get("summary", ""), "ok", ""))
+        elif skip_ai:
+            entries.append(_index_entry(source, display, name, "", "", "ok", ""))
         else:
             error = failure_by_file.get(name) or "未生成摘要"
             entries.append(_index_entry(source, display, name, "", "",
@@ -183,7 +188,7 @@ def _build_index_entries(today, article_list, summary_by_file, failure_by_file, 
     return entries
 
 
-def _build_entries_from_files(html_files, summary_by_file, failure_by_file):
+def _build_entries_from_files(html_files, summary_by_file, failure_by_file, skip_ai=False):
     """回退路径：没有文章列表 JSON 时，按成品文件组装索引条目"""
     entries = []
     for html_file in html_files:
@@ -192,6 +197,8 @@ def _build_entries_from_files(html_files, summary_by_file, failure_by_file):
         result = summary_by_file.get(name)
         if result is not None:
             entries.append(_index_entry(source, display, name, "", result.get("summary", ""), "ok", ""))
+        elif skip_ai:
+            entries.append(_index_entry(source, display, name, "", "", "ok", ""))
         else:
             error = failure_by_file.get(name) or "未生成摘要"
             entries.append(_index_entry(source, display, name, "", "",
@@ -361,10 +368,10 @@ def _summarize_step(today, log, article_list=None, missing_notes=None, should_st
 
     if article_list:
         entries = _build_index_entries(today, article_list, summary_by_file,
-                                       failure_by_file, missing_notes)
+                                       failure_by_file, missing_notes, skip_ai=skip_ai)
     else:
         log("⚠️  未找到文章列表 JSON，索引页回退为按成品文件生成")
-        entries = _build_entries_from_files(html_files, summary_by_file, failure_by_file)
+        entries = _build_entries_from_files(html_files, summary_by_file, failure_by_file, skip_ai=skip_ai)
 
     log("\n正在生成索引页...")
     index_path = folder / f"{today}.html"
