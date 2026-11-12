@@ -204,6 +204,7 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - **手动执行不再选日期**：页面只提交 `steps`，`start_run()` 的 `date_str` 省略时取当天；CLI 的 `--date` 仍可用
 - **已读状态**：按天存 `result/read_state.json`（`{"YYYY年MM月DD日": true}`），`load_read_state()` 容错（缺失/损坏视为全部未读），`set_read_state()` 在锁内原子写入（临时文件 + `os.replace`）；接口 `POST /api/read` body `{"date","read"}` → `{ok, error}`
 - **归档静态托管**：`GET /archive/<日期>/<相对路径>` 依次在 `OUTPUT_BASE_DIR` 与 `OUTPUT_BASE_DIR/"归档"` 下按扩展名返回 HTML/图片等（`Cache-Control: no-store`）；`_resolve_archive_file()` 拒绝 NUL/绝对路径/盘符/`..`，再用 `resolve()` + `is_relative_to()` 确认不越界，越界返回 404，只读不列目录
+- **热榜页**：`GET /trends` 返回 `TRENDS_PAGE`，`GET /api/trends` 读 `watch_export.list_trend_entries()`，展示 `archive=false` 订阅的最新条目（只看标题、点标题跳原站）
 - **执行日志页**：`GET /logs` 返回 `LOGS_PAGE`，整屏日志并每秒增量拉取 `/api/logs`；主页不再内嵌日志，标题右侧改为入口链接
 - **上次运行摘要**：`_run_worker` 结束时 `_save_last_run()` 原子写 `result/last_run.json`（`finished_at`/`date`/`articles`/`error`/`failures`/`step_times`），`GET /api/last` 读取（缺失或损坏返回 `{}`）；主页页头第二行展示，运行结束后自动刷新
 - **订阅配置页**：`GET /config` 返回 `CONFIG_PAGE`（`webui_page.py` 里的第二个页面常量），列出 `src/watch_feeds.json` 的订阅与检查状态；`GET /api/feeds` 汇总 `watch_export.list_feeds_state()`，`POST /api/feeds` 接受 `{"action":"add|remove","url":...}` 并调用 `watch_export.add_feed()/remove_feed()`（添加前先抓取校验，删除不清理 SQLite 中的历史条目）。`POST /api/discover` 调 `watch_export.discover_feeds()`，从任意网址找 feed（HTML 的 `<link rel="alternate">` 声明 → 常见路径 `/feed`、`/rss` 等，逐个实抓验证）。`feeds_payload()` 把依赖缺失收敛成 `error` 字段，缺 `feedparser` 时页面仍能打开

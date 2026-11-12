@@ -445,6 +445,35 @@ def remove_feed(url):
     return True, "已删除"
 
 
+def list_trend_entries(limit=30):
+    """列出「仅链接」订阅（archive=false）的最新条目，供热榜页面展示"""
+    conn = _connect()
+    try:
+        result = []
+        for feed in load_watch_feeds():
+            if feed.get("archive", True) is not False:
+                continue
+            url = feed["url"].strip()
+            rows = conn.execute(
+                """
+                SELECT title, link, published FROM entries
+                WHERE feed_url = ?
+                ORDER BY published DESC, id DESC
+                LIMIT ?
+                """,
+                (url, limit),
+            ).fetchall()
+            result.append({
+                "name": feed.get("name") or url,
+                "url": url,
+                "entries": [{"title": row["title"], "link": row["link"],
+                             "published": row["published"]} for row in rows],
+            })
+        return result
+    finally:
+        conn.close()
+
+
 def export_articles(skip_auth_check=False):
     """检查所有订阅，把新增文章写成 temp_data/「日期」.json
 

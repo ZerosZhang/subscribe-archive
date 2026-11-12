@@ -13,6 +13,7 @@
   进度条、当前状态文字、各步骤耗时统计（日期固定为今天，页面不再提供日期输入）
 - 实时日志：等宽字体、自动滚到底，失败行标红（含 `✗`/`❌`/「失败」）、警告标黄（`⚠️`）；
   主页不再内嵌日志，改为右上角「📜 执行日志」进入 `GET /logs` 整屏查看（增量拉取，向上滚动暂停自动跟随）
+- 热榜页：右上角「🔥 热榜」，展示知乎热榜、V2EX 等「仅链接」订阅的最新条目，点击标题跳原站
 - 上次运行摘要：页头第二行显示最近一次归档的时间、日期、新增篇数、用时与失败项数（红字），
   数据来自 `result/last_run.json`；运行结束时自动刷新
 - 归档日历：月视图（CSS Grid，无 JS 图表库），周一~周日七列，格子里是日期与当天篇数，
@@ -73,6 +74,8 @@
 | GET | `/` | 单页界面 |
 | GET | `/config` | 订阅配置页（列出 `src/watch_feeds.json` 的订阅与检查状态，可增删） |
 | GET | `/logs` | 执行日志页（整屏日志，增量拉取、自动跟随最新） |
+| GET | `/trends` | 热榜页：列出 `archive=false` 的订阅（只记标题、不下载正文） |
+| GET | `/api/trends` | `{ok, feeds:[{name,url,entries:[{title,link,published}]}]}` |
 | GET | `/api/last` | 上次运行摘要 `{finished_at, date, articles, error, failures, step_times}` |
 | GET | `/api/feeds` | `{ok, source, feeds:[{name,url,entries,last_check,last_error,fail_count}], error}` |
 | GET | `/api/state` | `{running, progress, progress_text, steps, step_times, last_log_index, next_log_index, today, schedule}` |

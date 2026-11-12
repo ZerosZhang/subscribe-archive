@@ -88,6 +88,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
 <body>
 <div class="wrap">
   <h1>订阅归档<span class="sub">网页版</span>
+    <a class="linkbtn gap" href="/trends">🔥 热榜</a>
     <a class="linkbtn gap" href="/logs">📜 执行日志</a>
     <a class="linkbtn" href="/config">⚙ 订阅配置</a>
   </h1>
@@ -708,6 +709,85 @@ h1{font-size:20px;margin:10px 0 8px}
   fetchStatus();
   setInterval(fetchLogs, 1000);
   setInterval(fetchStatus, 2000);
+})();
+</script>
+</body>
+</html>
+"""
+
+
+# =============================================================================
+# 热榜页（GET /trends）：只收录标题和链接的订阅（archive=false）
+# =============================================================================
+TRENDS_PAGE = r"""<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>热榜 · 订阅归档</title>
+<style>
+*{box-sizing:border-box}
+body{margin:0;font-family:sans-serif;background:#f6f8fa;color:#24292f;font-size:14px}
+.wrap{max-width:1180px;margin:0 auto;padding:16px}
+h1{font-size:20px;margin:10px 0 8px}
+h1 .sub{font-size:12px;font-weight:normal;color:#57606a;border:1px solid #d0d7de;
+        border-radius:10px;padding:1px 8px;margin-left:8px;vertical-align:middle}
+.linkbtn{float:right;font-size:13px;font-weight:normal;color:#0969da;text-decoration:none;
+         border:1px solid #d0d7de;border-radius:8px;padding:6px 14px;background:#fff;line-height:1.2}
+.linkbtn:hover{background:#f3f4f6}
+.hint{font-size:12px;color:#57606a;margin:0 0 14px}
+.card{background:#fff;border:1px solid #d0d7de;border-radius:8px;padding:12px 16px;margin-bottom:14px}
+.card h2{font-size:15px;margin:0 0 4px}
+.card .meta{font-size:12px;color:#57606a;margin-bottom:10px}
+ol.list{list-style:none;padding:0;margin:0}
+ol.list li{padding:8px 0;border-bottom:1px solid #eaeef2;display:flex;gap:12px;align-items:baseline}
+ol.list li:last-child{border-bottom:none}
+ol.list a{color:#0b6bcb;text-decoration:none;flex:1;word-break:break-all}
+ol.list a:hover{text-decoration:underline}
+ol.list .time{font-size:12px;color:#8c959f;white-space:nowrap}
+.empty{color:#8c959f;font-size:13px;padding:6px 0}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>热榜<span class="sub">仅标题 · 点击跳原站</span>
+    <a class="linkbtn" href="/">← 返回归档</a>
+  </h1>
+  <p class="hint">这些订阅只记录标题和链接，不下载正文；点击标题会打开原站页面。</p>
+  <div id="list"></div>
+</div>
+<script>
+(function(){
+  "use strict";
+  function esc(t){
+    return String(t === null || t === undefined ? "" : t)
+      .replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+  }
+  function fmt(iso){
+    if(!iso) return "";
+    return String(iso).replace("T"," ").slice(0,16);
+  }
+  fetch("/api/trends").then(function(r){ return r.json(); }).then(function(d){
+    var box = document.getElementById("list");
+    var feeds = (d && d.feeds) || [];
+    if(!feeds.length){
+      box.innerHTML = '<div class="card"><div class="empty">还没有「仅链接」订阅。</div></div>';
+      return;
+    }
+    box.innerHTML = feeds.map(function(f){
+      var items = (f.entries || []).map(function(e){
+        return '<li><a href="' + esc(e.link) + '" target="_blank" rel="noopener noreferrer">' +
+               esc(e.title) + '</a><span class="time">' + esc(fmt(e.published)) + "</span></li>";
+      }).join("");
+      return '<section class="card"><h2>' + esc(f.name) + "</h2>" +
+             '<div class="meta">共 ' + (f.entries || []).length + " 条 · " + esc(f.url) + "</div>" +
+             (items ? '<ol class="list">' + items + "</ol>" : '<div class="empty">暂无条目</div>') +
+             "</section>";
+    }).join("");
+  }).catch(function(e){
+    document.getElementById("list").innerHTML =
+      '<div class="card"><div class="empty">加载失败：' + esc(e) + "</div></div>";
+  });
 })();
 </script>
 </body>
