@@ -208,7 +208,7 @@ def format_failure_report(today, failures, step_times):
     step_times = step_times or {}
 
     lines = [
-        "Folo 文章归档失败通知",
+        "订阅文章归档失败通知",
         "=" * 32,
         f"日期：{today}",
         f"失败总数：{len(failures)} 条",
@@ -234,7 +234,7 @@ def format_failure_report(today, failures, step_times):
         lines.append("（无耗时记录）")
 
     lines.append("")
-    lines.append("请检查 Folo 认证与网络，并确认 config.json 中的 API 配置是否有效。")
+    lines.append("请检查订阅源、网络与代理，并确认 config.json 中的 API 配置是否有效。")
 
     return "\n".join(lines)
 

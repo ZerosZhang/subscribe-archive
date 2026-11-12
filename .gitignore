@@ -5,8 +5,9 @@
 __pycache__/
 *.pyc
 
-# 敏感配置（API Key / 邮箱授权码）
+# 个人配置（API Key / 邮箱授权码 / 订阅列表）
 src/config.json
+src/watch_feeds.json
 
 # 本地数据（SQLite 索引、文章列表、下载/转换输出）
 result/

@@ -1,20 +1,20 @@
 @echo off
 rem ==============================================================
-rem  Folo archive - desktop window launcher (GUI)
+rem  Subscribe archive - desktop window launcher (GUI)
 rem
-rem  Opens a small window with three buttons:
-rem     archive today / open web page / quit service
+rem  Opens a small window with two buttons:
+rem     open web page / quit service
 rem
 rem  Runs src\gui.py with pythonw.exe, so NO console window stays
 rem  open. Logs are NOT shown in the window - the web page has them.
 rem
 rem  Extra args are forwarded, e.g.:
-rem     start-folo.bat --port 9000 --no-schedule
+rem     start-console.bat --port 9000 --no-schedule
 rem
 rem  Keep this file PURE ASCII: cmd.exe reads .bat in the OEM code
 rem  page, so UTF-8 Chinese text here would corrupt parsing.
 rem
-rem  Console (headless-friendly) alternative: start-webui.bat
+rem  Headless / troubleshooting: run "python src\webui.py" directly.
 rem ==============================================================
 setlocal
 cd /d "%~dp0"
@@ -55,7 +55,7 @@ if errorlevel 1 (
     echo          python -m venv .venv
     echo          .venv\Scripts\pip install -r requirements.txt
     echo.
-    echo   Or use the plain web UI instead: start-webui.bat
+    echo   Or run: python src\webui.py
     echo.
     pause
     exit /b 1

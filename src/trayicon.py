@@ -186,7 +186,7 @@ class TrayIcon:
         icon_path:   可选 .ico 路径；不传则用系统默认应用图标
     """
 
-    _CLASS_NAME = "FoloArchiveTrayWnd"
+    _CLASS_NAME = "SubscribeArchiveTrayWnd"
     _WM_TRAY = WM_APP + 1
     _WM_NOTIFY = WM_APP + 2
     _ICON_ID = 1
@@ -213,7 +213,7 @@ class TrayIcon:
         """起托盘线程并注册图标；失败抛 RuntimeError"""
         if not AVAILABLE:
             raise RuntimeError("系统托盘目前只支持 Windows")
-        self._thread = threading.Thread(target=self._run, name="FoloTray", daemon=True)
+        self._thread = threading.Thread(target=self._run, name="SubscribeTray", daemon=True)
         self._thread.start()
         self._ready.wait(timeout)
         if self._error is not None:
@@ -389,13 +389,13 @@ def main():
     print(f"[i] NOTIFYICONDATAW 大小 = {ctypes.sizeof(NOTIFYICONDATAW)} 字节")
 
     tray = TrayIcon(
-        tooltip="Folo 归档（自测）",
+        tooltip="订阅归档（自测）",
         menu=[("show", "打开主窗口"), ("archive", "今日归档"), None, ("quit", "退出")],
         on_command=lambda cmd: print(f"[i] 选中菜单项: {cmd}"),
         on_activate=lambda: print("[i] 双击了图标"),
     ).start()
     print("[i] 图标已添加，双击图标或右键看菜单；3 秒后自动移除")
-    tray.notify("Folo 归档", "托盘自测：右键图标可退出")
+    tray.notify("订阅归档", "托盘自测：右键图标可退出")
     threading.Event().wait(3.0)
     tray.stop()
     print("[i] 图标已移除，托盘线程已结束")

@@ -16,15 +16,15 @@ from html import escape as html_escape
 from pathlib import Path
 from urllib.parse import quote
 
-# 功能模块目录 src/core/（utils、folo_export 等）
+# 功能模块目录 src/core/（utils、watch_export 等）
 sys.path.insert(0, str(Path(__file__).parent / "core"))
 
-from utils import format_duration, TEMP_DIR, RAW_DIR, OUTPUT_BASE_DIR
+from utils import format_duration, TEMP_DIR, RAW_DIR, OUTPUT_BASE_DIR, CONFIG_PATH
 from save_webpages import sanitize_filename
 
 # 步骤定义：(编号, 名称, 描述)
 STEPS = [
-    (1, "fetch", "获取 folo 的未读文章列表"),
+    (1, "fetch", "获取文章列表（订阅检查）"),
     (2, "download", "下载网页并优化文件名"),
     (3, "convert", "渲染为 HTML"),
     (4, "summarize", "AI 摘要与索引页生成"),
@@ -394,12 +394,12 @@ def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):
         failures 为字符串列表，仅汇总**系统性/流程级**失败（步骤 1 抓取或列表加载失败、
         流程 error），供邮件通知判定；步骤 2/3/4 的逐条内容失败在索引页内标注，不进邮件
     """
-    from folo_export import export_articles
     from render_html import scan_and_convert
+    from watch_export import export_articles
 
     total_steps = len(STEPS)
     log(f"{'=' * 60}")
-    log(f"Folo 文章归档 - {today}")
+    log(f"订阅归档 - {today}")
     log(f"{'=' * 60}")
     log("")
 
@@ -426,15 +426,15 @@ def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):
                 "conversion": conversion, "summary_result": summary_result,
                 "step_times": step_times, "error": error, "failures": failures}
 
-    # ========== 步骤 1: 获取未读文章列表（含认证检查）==========
+    # ========== 步骤 1: 获取文章列表（订阅检查）==========
     if should_run(1):
         if on_progress:
             on_progress(10, "步骤 1: 获取文章列表...")
 
-        # 当天列表已存在则直接复用，避免重复抓取（抓取会把 Folo 未读标记为已读）
+        # 当天列表已存在则直接复用，避免重复抓取（抓取会把来源里的新文章标记为已读/已见）
         json_path = TEMP_DIR / f"「{today}」.json"
         if json_path.exists():
-            log(f"[步骤 1/{total_steps}] 获取未读文章列表 - ⏭️ 跳过（已存在 「{today}」.json）")
+            log(f"[步骤 1/{total_steps}] 获取文章列表 - ⏭️ 跳过（已存在 「{today}」.json）")
             log("  提示：如需重新抓取，请先删除该文件，或用 --date 指定其他日期")
             article_list = _load_article_list(today)
             if not article_list:
@@ -445,7 +445,7 @@ def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):
             log(f"  列表文件: {json_path}")
             log("")
         else:
-            log(f"[步骤 1/{total_steps}] 获取未读文章列表...")
+            log(f"[步骤 1/{total_steps}] 获取文章列表（订阅检查）...")
             step_start = time.time()
             today_str, article_list, output_path, fetch_failure = export_articles(skip_auth_check=False)
 
@@ -456,7 +456,7 @@ def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):
                 if fetch_failure:
                     log(f"✗ 获取文章列表失败: {fetch_failure}")
                 else:
-                    log("✗ 没有未读文章")
+                    log("✗ 没有新文章")
                 return snapshot()
 
             step_times[1] = time.time() - step_start

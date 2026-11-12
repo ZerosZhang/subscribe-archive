@@ -19,7 +19,7 @@
 
 ```python
 tray = TrayIcon(
-    tooltip="Folo 归档",
+    tooltip="订阅归档",
     menu=[("show", "打开主窗口"), ("archive", "今日归档"), None, ("quit", "退出")],
     on_command=queue.put,                       # 回调在托盘线程里，别直接碰界面
     on_activate=lambda: queue.put("show"),      # 双击图标

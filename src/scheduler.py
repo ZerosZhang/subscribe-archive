@@ -8,8 +8,8 @@
 
 「当天是否已跑过」的判据：
 - 优先看步骤 1 产出的列表 JSON `result/temp_data/「日期」.json` 是否存在 ——
-  它是持久化产物，进程重启后依然有效，可避免重复执行会「把 Folo 未读标记
-  为已读」的步骤 1；
+  它是持久化产物，进程重启后依然有效，可避免重复执行会「把新条目记为已见」
+  的步骤 1；
 - 会话内再用 `last_run_date` 兜底：当天若没有未读文章则不会生成 JSON，
   仅靠文件判断会导致到点后反复触发。
 
@@ -44,7 +44,7 @@ LOG_PATH = PYTHON_ROOT / "result" / "scheduler.log"
 
 CHECK_INTERVAL = 20          # 秒，轮询检测间隔
 DEFAULT_TIME = "08:00"
-MUTEX_NAME = "FoloArchiveScheduler"
+MUTEX_NAME = "SubscribeArchiveScheduler"
 TIME_RE = re.compile(r"^([01]?\d|2[0-3]):([0-5]\d)$")
 
 
@@ -143,7 +143,7 @@ def _log_tail(n=12):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Folo 归档常驻定时运行",
+        description="订阅归档常驻定时运行",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""示例:
   python scheduler.py                 # 用 config.json 的 schedule 段
@@ -183,6 +183,11 @@ def main():
     _log("=" * 60)
 
     last_run_date = None
+    # 启动时已过今天的定时点：不补跑，等明天的定时点
+    if enabled and datetime.now() >= _target_today(at):
+        last_run_date = datetime.now().strftime("%Y年%m月%d日")
+        _log(f"启动时已过今天 {at} 的定时点，跳过本次（明天照常）")
+
     while True:
         try:
             today = datetime.now().strftime("%Y年%m月%d日")

@@ -1,18 +1,18 @@
 @echo off
 rem ================================================================
-rem  Folo archive - one-click setup
+rem  Subscribe archive - one-click setup
 rem
-rem    <this file>          setup  (installs "openai" only)
+rem    <this file>          setup
 rem    <this file> help     show this text
 rem
 rem  What it does:
-rem    1. check Python and Node.js
+rem    1. check Python
 rem    2. create or repair the .venv
 rem       (a .venv copied from another machine never works - it is
 rem        detected and rebuilt automatically)
-rem    3. install Python dependencies (via a mirror first)
+rem    3. install Python dependencies (openai, feedparser)
 rem    4. verify the CLI loads
-rem    5. check config.json and the Folo login state
+rem    5. check config.json and watch_feeds.json
 rem    6. optionally start the web UI
 rem ================================================================
 setlocal
@@ -23,7 +23,7 @@ if /i "%~1"=="-h"   goto :usage
 if /i "%~1"=="/?"   goto :usage
 
 echo ================================================================
-echo   Folo archive - setup
+echo   Subscribe archive - setup
 echo   Folder: %~dp0
 echo ================================================================
 echo.
@@ -38,21 +38,12 @@ if not defined PYCMD (
 )
 if not defined PYCMD goto :err_python
 
-echo [1/6] Python ......... ok
+echo [1/5] Python ......... ok
 %PYCMD% --version
 
-rem ------------------------------------------------- 2. Node.js
-where node >nul 2>&1
-if errorlevel 1 goto :err_node
-where npx  >nul 2>&1
-if errorlevel 1 goto :err_node
+rem ------------------------------------------------- 2. venv
 echo.
-echo [2/6] Node.js ........ ok
-node --version
-
-rem ------------------------------------------------- 3. venv
-echo.
-echo [3/6] Virtual env ...
+echo [2/5] Virtual env ...
 set "VPY=%~dp0.venv\Scripts\python.exe"
 
 if exist "%VPY%" (
@@ -70,19 +61,19 @@ if not exist "%VPY%" (
 )
 echo       ok
 
-rem ------------------------------------------------- 4. dependencies
+rem ------------------------------------------------- 3. dependencies
 echo.
-echo [4/6] Installing dependencies ^(openai only^) ...
+echo [3/5] Installing dependencies ^(openai, feedparser^) ...
 "%VPY%" -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple
-"%VPY%" -m pip install openai -i https://pypi.tuna.tsinghua.edu.cn/simple
-if errorlevel 1 "%VPY%" -m pip install openai
-"%VPY%" -c "import openai" >nul 2>&1
+"%VPY%" -m pip install openai feedparser -i https://pypi.tuna.tsinghua.edu.cn/simple
+if errorlevel 1 "%VPY%" -m pip install openai feedparser
+"%VPY%" -c "import openai, feedparser" >nul 2>&1
 if errorlevel 1 goto :err_pip
 echo       ok
 
-rem ------------------------------------------------- 5. self check
+rem ------------------------------------------------- 4. self check
 echo.
-echo [5/6] Checking the CLI ...
+echo [4/5] Checking the CLI ...
 "%VPY%" "%~dp0src\archive.py" --list-steps >nul 2>&1
 if errorlevel 1 goto :err_selfcheck
 echo       ok
@@ -99,22 +90,21 @@ if errorlevel 1 (
     echo       tkinter ^(desktop window^) ... ok
 )
 
-rem ------------------------------------------------- 6. config / login
+rem ------------------------------------------------- 5. config
 echo.
-echo [6/6] Configuration ...
+echo [5/5] Configuration ...
 if exist "%~dp0src\config.json" (
     echo       src\config.json ......................... found
 ) else (
     echo       [WARN] src\config.json is missing.
-    echo              Copy src\config.example.json, fill in api_key / base_url / model,
-    echo              and add the "mail" section if you want failure e-mails.
+    echo              Copy src\config.example.json and fill in api_key / base_url / model.
+    echo              Add the "mail" section if you want failure e-mails.
 )
-if exist "%USERPROFILE%\.folo\config.json" (
-    echo       Folo login ^(%USERPROFILE%\.folo\config.json^) ... found
+if exist "%~dp0src\watch_feeds.json" (
+    echo       src\watch_feeds.json .................... found
 ) else (
-    echo       [WARN] No Folo login for this account.
-    echo              Run: npx --yes folocli@latest login
-    echo              or copy .folo\config.json from a machine that is already signed in.
+    echo       [WARN] src\watch_feeds.json is missing.
+    echo              Create it, or add feeds from the web UI (Config page).
 )
 
 rem ------------------------------------------------- summary
@@ -128,13 +118,12 @@ for %%F in ("%~dp0*.bat") do echo     - %%~nxF
 echo.
 echo   Hints:
 echo     * desktop launcher  : opens the small window (archive / open page / quit)
-echo     * web launcher      : console mode, opens the browser UI and stays open
 echo.
 echo   Note: keep every .bat in this folder PURE ASCII - cmd.exe reads
 echo         them in the OEM code page, so UTF-8 Chinese text would break them.
 echo.
-echo   Reminder: api.folo.is may need a proxy on this network.
-echo             Verify with:  npx --yes folocli@latest whoami
+echo   Reminder: overseas feeds may need a proxy. Set HTTP_PROXY / HTTPS_PROXY
+echo             in the environment before running the archive if needed.
 echo.
 
 set /p "STARTNOW=Start the desktop window now? [Y/N]: "
@@ -150,7 +139,7 @@ exit /b 0
 
 :usage
 echo Usage:
-echo   %~nx0          setup (openai only)
+echo   %~nx0          setup
 echo   %~nx0 help     this text
 pause
 exit /b 0
@@ -160,15 +149,6 @@ echo.
 echo [ERROR] Python not found.
 echo         Install Python 3.10+ from https://www.python.org/downloads/windows/
 echo         and tick "Add python.exe to PATH" during setup.
-echo.
-pause
-exit /b 1
-
-:err_node
-echo.
-echo [ERROR] Node.js / npx not found.
-echo         Install Node.js 18+ from https://nodejs.org/
-echo         The project calls "npx folocli" to talk to Folo.
 echo.
 pause
 exit /b 1
@@ -183,7 +163,7 @@ exit /b 1
 
 :err_pip
 echo.
-echo [ERROR] Dependency installation failed (openai could not be imported).
+echo [ERROR] Dependency installation failed (openai / feedparser missing).
 echo         Check your network, then retry this script.
 echo.
 pause

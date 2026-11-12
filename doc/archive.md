@@ -41,7 +41,7 @@
 
 ## 行为
 
-- 当天列表 `result/temp_data/「日期」.json` 已存在时，步骤 1 自动**跳过抓取**并复用该 JSON（避免重复把 Folo 未读标记为已读）；要强制重抓需先删除该文件，或用 `--date` 指定另一个日期
+- 当天列表 `result/temp_data/「日期」.json` 已存在时，步骤 1 自动**跳过抓取**并复用该 JSON（避免重复抓取、重复记为已见）；要强制重抓需先删除该文件，或用 `--date` 指定另一个日期
 - 跳过步骤 1-2 时，步骤 2 自动从 `result/temp_data/「日期」.json` 加载文章列表
 - 步骤 2 无法加载列表时以退出码 1 结束
 - **同一天重跑**（再次整轮执行）：复用列表 → 重下载并覆盖原始 HTML → 重渲染 → 重新生成摘要并覆盖（详见 `doc/archive_core.md`）
@@ -70,5 +70,5 @@
 
 - 日志默认输出到 stdout，**不会**自动写入 `result\archive.log`；需要留存日志请在任务计划程序里
   自行重定向（例如 `cmd /c ".venv\Scripts\python.exe src\archive.py >> result\archive.log 2>&1"`）
-- 计划任务以「运行该任务时的账户」启动，因此能读到该用户的 `~/.folo/config.json` 登录态
+- 计划任务以「运行该任务时的账户」启动，因此能读到该用户的配置文件与状态库
 - 服务器上**只需** `.venv\Scripts\pip install openai`，CLI 不需要任何界面库

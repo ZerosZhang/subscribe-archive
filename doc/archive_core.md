@@ -35,7 +35,7 @@ run_archive(selected_steps, today, log, on_progress=None, should_stop=None) -> d
 ## 流程
 
 ```
-步骤 1 fetch    → folo_export.export_articles()
+步骤 1 fetch    → watch_export.export_articles()
                   （当天 JSON 已存在时跳过，改为 _load_article_list 加载）
 步骤 2 download → save_webpages.download_articles(overwrite=True) + optimize_titles()
                   （输出 result/temp_data/raw/<日期>/）
@@ -61,7 +61,7 @@ run_archive(selected_steps, today, log, on_progress=None, should_stop=None) -> d
 ## 行为要点
 
 - 每步之间检查 `should_stop()`，停止时提前返回
-- 步骤 1 **当天列表已存在则跳过抓取**：先算 `json_path = TEMP_DIR / f"「{today}」.json"`，若已存在，则打印跳过日志（并提示可删除该文件或改用 `--date` 强制重抓），再用 `_load_article_list(today)` 从该 JSON 加载列表，**不调用 `export_articles()`**（该步骤会把 Folo 未读标记为已读，绝不能在重跑时触发）；仅当 JSON 不存在时才调用 `export_articles()`
+- 步骤 1 **当天列表已存在则跳过抓取**：先算 `json_path = TEMP_DIR / f"「{today}」.json"`，若已存在，则打印跳过日志（并提示可删除该文件或改用 `--date` 强制重抓），再用 `_load_article_list(today)` 从该 JSON 加载列表，**不调用 `export_articles()`**（该步骤会把新条目记为已见，绝不能在重跑时触发）；仅当 JSON 不存在时才调用 `export_articles()`
 - 步骤 1 抓取分支无文章列表时直接返回（`article_list=None`）；认证失败/抓取异常写入 `failures`。跳过分支若无法加载列表则记入 `failures` 并返回，不作网络请求
 - 步骤 2 单独运行时从 `result/temp_data/「日期」.json` 加载列表（`_load_article_list`）
 - 步骤 2 以 **`overwrite=True`** 调用 `download_articles`，同一天重跑时重新下载并覆盖旧的原始 HTML（`save_webpages.py` 自身的 CLI 默认仍为 `overwrite=False`）
@@ -81,7 +81,7 @@ run_archive(selected_steps, today, log, on_progress=None, should_stop=None) -> d
 
 ```python
 STEPS = [
-    (1, "fetch", "获取 folo 的未读文章列表"),
+    (1, "fetch", "获取文章列表（订阅检查）"),
     (2, "download", "下载网页并优化文件名"),
     (3, "convert", "渲染为 HTML"),
     (4, "summarize", "AI 摘要与索引页生成"),

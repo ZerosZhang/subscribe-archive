@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """
-Folo 文章归档 —— 桌面小窗口（GUI）
+订阅文章归档 —— 桌面小窗口（GUI）
 
-一个极简的「服务管家」窗口，只有三个按钮：
+一个极简的「服务管家」窗口，只有两个按钮：
 
-    今日归档        触发当天完整归档（四步全跑）
-    打开 web 页面    用浏览器打开网页版界面
+    打开 web 页面    用浏览器打开网页版界面（归档操作都在页面里）
     退出服务        停止本地服务并关闭窗口
 
 **关闭窗口（X 或 Esc）不会退出**，而是把窗口收进系统托盘继续后台运行；
@@ -18,7 +17,7 @@ Folo 文章归档 —— 桌面小窗口（GUI）
 直接调用 webui.start_run() / state_payload()，不需要子进程与进程间通信。
 
 运行：
-    pythonw src/gui.py        # 无控制台窗口（双击 启动Folo.bat 走这条）
+    pythonw src/gui.py        # 无控制台窗口（双击 启动控制台.bat 走这条）
     python  src/gui.py        # 带控制台，便于观察启动异常
 """
 
@@ -27,7 +26,6 @@ import ctypes
 import queue
 import sys
 import webbrowser
-from datetime import datetime
 from pathlib import Path
 
 # 脚本所在目录（src/）与功能模块目录（src/core/）
@@ -35,7 +33,7 @@ SCRIPT_DIR = Path(__file__).parent
 sys.path.insert(0, str(SCRIPT_DIR))
 sys.path.insert(0, str(SCRIPT_DIR / "core"))
 
-TITLE = "Folo 归档"
+TITLE = "订阅归档"
 
 
 def _fatal(message):
@@ -76,7 +74,7 @@ except Exception:  # noqa: BLE001
     TrayIcon = None
 
 
-class FoloWindow:
+class ArchiveWindow:
     """三个按钮的极简窗口：只管住「归档 / 打开页面 / 退出」三件事
 
     点窗口关闭按钮（或按 Esc）**不退出**，而是把窗口收进系统托盘继续后台跑；
@@ -110,7 +108,7 @@ class FoloWindow:
         frame.pack(fill="both", expand=True)
 
         tk.Label(
-            frame, text="Folo 归档",
+            frame, text="订阅归档",
             font=("Microsoft YaHei UI", 13, "bold"), anchor="w",
         ).pack(anchor="w")
 
@@ -121,12 +119,6 @@ class FoloWindow:
         self.status.pack(fill="x", pady=(6, 12))
 
         button_font = ("Microsoft YaHei UI", 10)
-        self.archive_button = tk.Button(
-            frame, text="今日归档", width=26, height=2, font=button_font,
-            command=self.archive_today,
-        )
-        self.archive_button.pack(pady=3)
-
         self.page_button = tk.Button(
             frame, text="打开 web 页面", width=26, height=2, font=button_font,
             command=self.open_page,
@@ -175,8 +167,7 @@ class FoloWindow:
         try:
             self.tray = TrayIcon(
                 tooltip=TITLE,
-                menu=[("show", "打开主窗口"), ("archive", "今日归档"),
-                      None, ("quit", "退出")],
+                menu=[("show", "打开主窗口"), None, ("quit", "退出")],
                 on_command=self._tray_commands.put,
                 on_activate=lambda: self._tray_commands.put("show"),
             ).start()
@@ -197,8 +188,6 @@ class FoloWindow:
     def _handle_tray_command(self, command):
         if command == "show":
             self.show_window()
-        elif command == "archive":
-            self.archive_today()
         elif command == "quit":
             self.exit_service()
 
@@ -222,17 +211,6 @@ class FoloWindow:
         self.hidden = False
 
     # -------------------------------------------------------------- 按钮
-    def archive_today(self):
-        """触发当天完整归档；真正的执行与日志都在网页版里"""
-        if self.service is None:
-            return self._report("服务未启动，无法归档", error=True)
-
-        today = datetime.now().strftime("%Y年%m月%d日")
-        ok, error = webui.start_run([1, 2, 3, 4], today)
-        if ok:
-            return self._report(f"已开始归档 {today}，进度与日志请看 web 页面")
-        return self._report(f"未能开始归档：{error}", error=True)
-
     def open_page(self):
         if self.service is None:
             return self._report("服务未启动，无法打开页面", error=True)
@@ -263,7 +241,7 @@ class FoloWindow:
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Folo 文章归档 —— 桌面小窗口",
+        description="订阅文章归档 —— 桌面小窗口",
     )
     parser.add_argument("--host", default=None,
                         help="监听地址（默认 127.0.0.1，可被 config.json 的 web.host 覆盖默认值）")
@@ -275,7 +253,7 @@ def parse_args():
 
 def main():
     args = parse_args()
-    FoloWindow(args.host, args.port, schedule=not args.no_schedule).run()
+    ArchiveWindow(args.host, args.port, schedule=not args.no_schedule).run()
     return 0
 
 

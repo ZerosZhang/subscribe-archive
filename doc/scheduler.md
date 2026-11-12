@@ -37,15 +37,15 @@
 ## 「当天是否已跑过」的判据
 
 1. **优先**：步骤 1 产出的列表 JSON `result/temp_data/「日期」.json` 是否存在 —— 它是持久化
-   产物，进程重启后依然有效，可避免重复执行会「把 Folo 未读标记为已读」的步骤 1；
+   产物，进程重启后依然有效，可避免重复执行会「把新条目记为已见」的步骤 1；
 2. **兜底**：进程内的 `last_run_date` —— 当天若没有未读文章则不会生成 JSON，仅靠文件
    判断会导致到点后每 20 秒反复触发。
 
-因此：**当天已有 JSON 就跳过**，同一天最多触发一次。想手动补跑用网页版界面或直接跑 `archive.py`。
+因此：**当天已有 JSON 就跳过**，同一天最多触发一次。**启动时若已过今天的定时点也不补跑**，等明天到点。想手动补跑用网页版界面或直接跑 `archive.py`。
 
 ## 单实例保护
 
-用 Windows 命名互斥量（`CreateMutexW` + `ERROR_ALREADY_EXISTS`，名称 `FoloArchiveScheduler`）
+用 Windows 命名互斥量（`CreateMutexW` + `ERROR_ALREADY_EXISTS`，名称 `SubscribeArchiveScheduler`）
 保证同一时间只有一个常驻实例；重复启动会打印提示并立即退出。非 Windows 环境或调用失败时不阻塞启动。
 
 网页版 `webui.py` 默认会内建定时并抢占同一个互斥量，因此**若网页版正在运行并持有互斥量，

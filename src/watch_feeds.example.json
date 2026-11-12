@@ -1,0 +1,16 @@
+{
+  "feeds": [
+    {
+      "name": "少数派",
+      "url": "https://sspai.com/feed"
+    },
+    {
+      "name": "小众软件",
+      "url": "https://www.appinn.com/feed/"
+    },
+    {
+      "name": "阮一峰的网络日志",
+      "url": "https://www.ruanyifeng.com/blog/atom.xml"
+    }
+  ]
+}

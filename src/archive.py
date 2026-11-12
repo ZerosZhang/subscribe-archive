@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Folo 文章一键归档脚本（CLI）
-连续执行：获取未读文章列表 → 下载网页到本地 → 优化文件名 → HTML 转 Markdown
+订阅文章一键归档脚本（CLI）
+连续执行：获取订阅更新列表 → 下载网页到本地 → 优化文件名 → HTML 转 Markdown
 核心流程见 archive_core.py
 
 用法:
@@ -18,7 +18,7 @@ from pathlib import Path
 
 # 源码根（本文件在 src/ 下）
 sys.path.insert(0, str(Path(__file__).parent))
-# 功能模块目录 src/core/（utils、folo_export 等）
+# 功能模块目录 src/core/（utils、watch_export 等）
 sys.path.insert(0, str(Path(__file__).parent / "core"))
 
 # Windows 终端编码修复（必须在导入其他模块之前执行）
@@ -31,7 +31,7 @@ from archive_core import STEPS, run_archive
 def parse_args():
     """解析命令行参数"""
     parser = argparse.ArgumentParser(
-        description="Folo 文章一键归档脚本",
+        description="订阅文章一键归档脚本",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""示例:
   python archive.py                # 完整执行所有步骤
@@ -67,7 +67,7 @@ def notify_failures(today, result):
         print("⚠️  本次存在失败，但未配置邮件通知（config.json 的 mail 段缺失或未启用）")
         return
 
-    subject = f"[Folo 归档失败] {today} 共 {len(failures)} 项"
+    subject = f"[订阅归档失败] {today} 共 {len(failures)} 项"
     body = format_failure_report(today, failures, result.get("step_times") or {})
     ok, message = send_failure_mail(mail_config, subject, body)
     if ok:
@@ -81,7 +81,7 @@ def main():
 
     # 列出所有步骤
     if args.list_steps:
-        print("Folo 文章归档步骤：")
+        print("订阅归档步骤：")
         print()
         for num, name, desc in STEPS:
             print(f"  {num}. {desc}")

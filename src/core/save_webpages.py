@@ -289,7 +289,7 @@ def optimize_titles(output_dir):
 def main():
     today = datetime.now().strftime("%Y年%m月%d日")
 
-    # 默认路径：按 folo_export.py 的实际文件名格式（result/temp_data/）
+    # 默认路径：按文章列表 JSON 的实际文件名格式（result/temp_data/）
     default_list = TEMP_DIR / f"「{today}」.json"
     fallback_list = TEMP_DIR / f"{today}.json"
     default_output = Path(today)
@@ -336,7 +336,7 @@ def main():
     # 读取列表
     if not list_path.exists():
         print(f"错误: 列表文件不存在: {list_path}")
-        print("请先运行 folo_export.py 获取文章列表")
+        print("请先运行 watch_export.py 获取文章列表")
         sys.exit(1)
 
     with open(list_path, 'r', encoding='utf-8') as f:

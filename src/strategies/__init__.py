@@ -2,7 +2,8 @@
 """来源解析策略包：导入全部策略以触发注册
 注意：导入顺序即注册顺序，第一个匹配的策略被使用，请保持原有顺序"""
 
-from .base import BaseStrategy, register_strategy, resolve_strategy, _STRATEGIES
+from .base import (BaseStrategy, register_strategy, resolve_strategy,
+                   resolve_strategy_for_feed, strategy_domains, _STRATEGIES)
 from . import suiyan
 from . import sspai
 from . import appinn

@@ -9,15 +9,17 @@
 
 页面功能：
 
-- 手动执行：4 个步骤复选框（按 `archive_core.STEPS` 动态生成）、日期输入、开始/停止、
-  进度条、当前状态文字、各步骤耗时统计
-- 实时日志：等宽字体、自动滚到底，失败行标红（含 `✗`/`❌`/「失败」）、警告标黄（`⚠️`）
-- 阅读状态日历（原热力图）：HTML/CSS 网格绘制（无 JS 图表库），列=周、行=周一~周日，
-  三态配色（灰=无归档、绿=未读、蓝=已读），含星期/月份标签与三态图例；
-  桌面显示最近 53 周，窗口宽度不足 900px（平板/手机）时按可用宽度自动缩短到半年以内、
-  宽度更窄时继续减少周数，因此不会出现横向滚动条；窗口尺寸变化后自动重排；
-  悬停显示日期与篇数，单击在新标签页打开当天总览并标记为已读，Shift/Alt+单击只切换已读状态；
-  另有一行总篇数 / 最近 30 天 / 已读天数的概览
+- 手动执行：4 个步骤复选框（按 `archive_core.STEPS` 动态生成）、开始/停止、
+  进度条、当前状态文字、各步骤耗时统计（日期固定为今天，页面不再提供日期输入）
+- 实时日志：等宽字体、自动滚到底，失败行标红（含 `✗`/`❌`/「失败」）、警告标黄（`⚠️`）；
+  主页不再内嵌日志，改为右上角「📜 执行日志」进入 `GET /logs` 整屏查看（增量拉取，向上滚动暂停自动跟随）
+- 上次运行摘要：页头第二行显示最近一次归档的时间、日期、新增篇数、用时与失败项数（红字），
+  数据来自 `result/last_run.json`；运行结束时自动刷新
+- 归档日历：月视图（CSS Grid，无 JS 图表库），周一~周日七列，格子里是日期与当天篇数，
+  三态配色（灰=无归档、绿=未读、蓝=已读），今天描边、未来日期淡化；
+  顶部「‹ 月份 ›」切换月份、「今天」跳回当月；悬停显示日期与篇数，
+  单击在新标签页打开当天总览并标记为已读，Shift/Alt+单击只切换已读状态；
+  上方一行显示总篇数 / 最近 30 天 / 已读天数
 - 浏览归档产物：`GET /archive/...` 直接托管 `result/` 与 `result/归档/` 下的成品 HTML 与
   `assets/` 图片，从日历点击即可跳转查看（只读，防路径穿越）
 - 常驻定时：**内建调度线程**（默认开启），每天到设定时刻自动跑一次完整归档；
@@ -25,16 +27,20 @@
   页面只在标题下用一行文字说明定时时间与负责人，不再单独占一张卡片
 - 失败邮件：运行结束后 `failures` 非空时按 `config.json` 的 `mail` 段发信（`failures` 只含系统性/流程级失败；
   下载/渲染/摘要的逐条内容失败在当日索引页内标注，不再发邮件）
+- 订阅配置：标题右上角「⚙ 订阅配置」进入 `GET /config`，列出订阅源、已记录条数、上次检查时间与失败状态；
+  可直接添加（先抓取验证能否解析）或删除，改动写回 `src/watch_feeds.json`；
+  「策略」列显示该源会命中哪个专用解析策略（`strategies.resolve_strategy_for_feed()` 近似判断：名称提示 → 网域），
+  没有则显示「通用」；
+  页面顶部一行说明当前来源（`config.json` 的 `source`）
 
 ## 新增文件
 
 | 文件 | 说明 |
 |------|------|
-| `src/webui.py` | HTTP 服务 + 全部后端逻辑（日志捕获、运行线程、热力图、内建定时调度、邮件、服务生命周期） |
+| `src/webui.py` | HTTP 服务 + 全部后端逻辑（日志捕获、运行线程、归档日历、内建定时调度、邮件、服务生命周期） |
 | `src/webui_page.py` | 单页 HTML/CSS/JS，作为字符串常量 `PAGE`，由 `GET /` 返回 |
 | `src/gui.py` | 桌面小窗口，进程内嵌本服务（见 [gui.md](gui.md)） |
-| `启动Web界面.bat` | 双击启动（纯 ASCII，前台运行以便 Ctrl+C 停止） |
-| `启动Folo.bat` | 双击启动桌面小窗口（`pythonw`，无控制台） |
+| `启动控制台.bat` | 双击启动桌面小窗口（`pythonw`，无控制台） |
 
 ## 运行
 
@@ -49,7 +55,7 @@
 .venv/Scripts/python.exe src/webui.py --no-schedule
 ```
 
-或双击项目根的 `启动Web界面.bat`（可带参数，如 `启动Web界面.bat --port 9000`）。
+日常通过 `启动控制台.bat`（桌面小窗口）启动；也可在命令行前台运行以便 Ctrl+C 停止。
 
 默认值可在 `config.json` 里通过可选的 `web` 段覆盖（读不到或格式不对会安全回退，
 **不使用** `utils.load_config()`，因为它缺字段会 `sys.exit(1)`）：
@@ -65,6 +71,10 @@
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/` | 单页界面 |
+| GET | `/config` | 订阅配置页（列出 `src/watch_feeds.json` 的订阅与检查状态，可增删） |
+| GET | `/logs` | 执行日志页（整屏日志，增量拉取、自动跟随最新） |
+| GET | `/api/last` | 上次运行摘要 `{finished_at, date, articles, error, failures, step_times}` |
+| GET | `/api/feeds` | `{ok, source, feeds:[{name,url,entries,last_check,last_error,fail_count}], error}` |
 | GET | `/api/state` | `{running, progress, progress_text, steps, step_times, last_log_index, next_log_index, today, schedule}` |
 | GET | `/api/logs?since=N` | `{lines:[...], next:N}`，增量拉取（`N` 为上次返回的 `next`） |
 | GET | `/api/heatmap` | `{days:{日期:{"count":篇数,"read":布尔}}, total, recent30, read_days}` |
@@ -73,8 +83,10 @@
 | POST | `/api/run` | body `{"steps":[1,2,3,4], "date":"YYYY年MM月DD日"}` → `{ok, error}` |
 | POST | `/api/stop` | 请求停止当前运行 → `{ok}` |
 | POST | `/api/read` | body `{"date":"YYYY年MM月DD日", "read":true|false}` → `{ok, error}` |
+| POST | `/api/feeds` | body `{"action":"add|remove", "url":"..."}` → `{ok, message, feeds}` |
+| POST | `/api/discover` | body `{"url":"..."}` → `{ok, candidates:[{url,title}], error}`；从任意网址找可用 feed |
 
-前端约每 1 秒轮询 `/api/state` 与 `/api/logs?since=N`；热力图按需刷新并在窗口尺寸变化后重排，
+前端约每 1 秒轮询 `/api/state` 与 `/api/logs?since=N`；归档日历在运行结束后刷新，
 常驻定时状态约每 30 秒刷新（只更新标题下那一行说明）。
 
 ## 关键实现
@@ -119,19 +131,18 @@
 `format_failure_report` + `send_failure_mail` 并写日志，未配置则只记一行提示，
 全程 try/except，绝不抛异常。这里的 `failures` 与 CLI 同源，只含系统性/流程级失败。
 
-### 阅读状态日历（原热力图）与已读状态
+### 归档日历（月视图）与已读状态
 
 数据来自 `heatmap.scan_daily_counts`（纯标准库，见 [doc/heatmap.md](heatmap.md)），
 扫描 `OUTPUT_BASE_DIR` 与 `OUTPUT_BASE_DIR/"归档"` 后按日期相加；再与按天的已读状态
 合并，返回 `{days:{日期:{"count":篇数,"read":布尔}}, total, recent30, read_days}`，
 带 5 秒缓存（调用 `POST /api/read` 会立即让缓存失效）。
 
-前端把 `days` 在 JS 里渲染成 CSS Grid（列=周、行=周一~周日），周数随窗口宽度决定：
-桌面最多 53 周，宽度不足 900px 时最多 26 周（半年），更窄时按可用宽度继续减少，
-始终不产生横向滚动；月份标签过密或贴近右边缘时省略，避免重叠。按三态上色：
-无归档（`count==0`）= 浅灰 `#ebedf0`，有归档且未读 = 绿 `#2ea043`，
-有归档且已读 = 蓝 `#0969da`。单元格 `title` 提示 `日期 · 篇数 · 状态`（无归档提示
-「无归档」，未来日期不显示）。单击有归档的格子 → `window.open` 打开
+前端把 `days` 渲染成月历：按当月 1 号是周几补空白格，七列排满整月，
+格子上是日号与右上角篇数。三态上色：无归档 = `#f2f4f6`，有归档且未读 = `#dafbe1`（绿字），
+有归档且已读 = `#ddf4ff`（蓝字）；今天带内描边，未来日期淡化。顶部按钮切换月份或跳回当月，
+切换只重绘、不重新请求数据。单元格 `title` 提示 `日期 · 篇数 · 状态`（无归档提示
+「无归档」）。单击有归档的格子 → `window.open` 打开
 `/archive/<日期>/<日期>.html` 总览页，同时 `POST /api/read {read:true}`；Shift/Alt+
 单击只切换已读状态、不跳转。无归档的格子不可跳转。
 
@@ -141,7 +152,7 @@
 - `load_read_state()`：文件不存在 / 损坏 / 结构不对一律返回 `{}`（视为全部未读），不报错。
 - `set_read_state(date_key, read)`：校验日期格式后在 `_READ_LOCK` 内读写；写入用
   `_save_read_state()` **原子落盘**（先写 `read_state.json.tmp` 再 `os.replace`），
-  避免半截 JSON；成功后清空热力图缓存。
+  避免半截 JSON；成功后清空日历缓存。
 - `POST /api/read` body `{"date","read"}` → `{ok, error}`；日期非法或 `read` 非布尔值都
   返回 `{ok:false, error}`。
 
@@ -166,7 +177,7 @@ Content-Type 表里，返回 `text/css; charset=utf-8`）——不需要额外�
 用 `--no-schedule` 可关闭，退回「界面 + `scheduler.py` 独立调度」的旧样子。
 
 - **归属判定**：启动时读 `config.json` 的 `schedule` 段并尝试用命名互斥量
-  `CreateMutexW(None, False, "FoloArchiveScheduler")` 抢占调度权（名称与
+  `CreateMutexW(None, False, "SubscribeArchiveScheduler")` 抢占调度权（名称与
   `scheduler.py` 的 `MUTEX_NAME` 一致）。取到就启动调度线程并**长期持有句柄**
   （进程存活期间不 `CloseHandle`）；取不到（`GetLastError` 为 `183`
   `ERROR_ALREADY_EXISTS`）说明外部调度器在跑，只记一行日志、不重复调度。
@@ -224,4 +235,4 @@ print('/ ->', len(urllib.request.urlopen('http://127.0.0.1:8765/', timeout=10).r
 "
 ```
 
-> 自测运行时**只跑步骤 3**（`{"steps":[3]}`），避免触发步骤 1 把 Folo 未读标记为已读。
+> 自测运行时**只跑步骤 3**（`{"steps":[3]}`），避免触发步骤 1 把新条目记为已见。

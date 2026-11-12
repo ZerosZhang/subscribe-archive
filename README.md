@@ -1,6 +1,6 @@
 <p align="center">
-  <h1 align="center">📥 Folo 阅读归档</h1>
-  <p align="center">自动归档 Folo 阅读中的未读文章：一键获取 → 下载 → 渲染干净 HTML → AI 摘要</p>
+  <h1 align="center">📥 订阅归档</h1>
+  <p align="center">检查订阅更新 → 下载网页 → 渲染干净 HTML → AI 摘要</p>
 </p>
 
 <p align="center">
@@ -11,141 +11,129 @@
 
 ## 📖 背景
 
-### Folo 是什么
+RSS 阅读适合快速浏览，但文章链接会失效、网站会改版、内容会被删除。本项目定期检查订阅源，把新文章**完整归档到本地**：下载网页、渲染成干净且适合手机阅读的 HTML、图片存到本地，并用 AI 生成摘要。
 
-[Folo](https://folo.cn)（Follow 的桌面客户端）是一个新一代信息聚合阅读工具：它把传统 RSS 订阅、AI 生成内容、论坛讨论、社交媒体动态统一到同一个订阅流中。你在 Folo 里添加感兴趣的来源（科技博客、行业资讯、个人周刊……），它会持续抓取并推送到你的"未读"列表。
+没有 RSS 的站点（微博、知乎、B 站等）可先用 [RSSHub](https://docs.rsshub.app/) 转成订阅地址，再加进订阅列表。
 
-### 这个项目做了什么
+为什么归档成本地 HTML：
 
-Folo 适合**快速浏览**，但阅读之外的需求它并不负责：文章链接会失效、网站会改版、内容会被删除。本项目把你标记为未读的长文**完整归档到本地**——自动下载网页、渲染成干净、适合手机阅读的 HTML、把图片保存到本地，并用 AI 生成摘要。
-
-### 为什么归档为本地 HTML
-
-- **永久保存**：订阅源的内容随时可能下架或反爬，本地副本不依赖任何平台
-- **随处可读**：归档产物是干净 HTML + 本地图片，任意浏览器直接打开；把 `result/` 整个同步到 NAS / 共享文件夹，就能在电脑、平板、手机上浏览（页面样式统一来自 `result/style.css` 一份文件）
-- **从"刷"到"读"**：Folo 里的文章读完即忘，归档后可以随时回看历史文章
-- **每日索引**：每天自动生成一个按来源分组的索引页，一眼看全当天都读了什么
+- **永久保存**：本地副本不依赖任何平台，不担心下架或反爬
+- **随处可读**：干净 HTML + 本地图片，任意浏览器打开；整个 `result/` 同步到 NAS 就能多端浏览
+- **每日索引**：每天生成按来源分组的索引页
 
 ## ✨ 特性
 
-- **一键归档**：CLI 或网页版界面串行执行 4 个步骤，断点续跑，随时停止
-- **智能识别**：策略模式自动识别 22 种来源（少数派、36氪、阮一峰等），按来源提取正文
-- **干净 HTML 输出**：剥离脚本与广告，套响应式模板，手机端可读；HTML 只放内容，样式就是 `result/style.css` 一份文件（改一处，所有页面立刻变）；含每日索引页
-- **AI 摘要**：DeepSeek API 生成通俗摘要，注入文章页的摘要区块
-- **本地化图片**：文章图片自动下载到 `assets/`，不依赖外链
-- **本地网页版界面**：只用标准库的本地 HTTP 服务（Windows Server 2016 也能跑），浏览器打开即可操作与查看实时日志、进度、耗时、阅读状态日历与每日定时状态
+- **订阅检查**：抓取 RSS/Atom，按 guid 去重，支持 ETag / Last-Modified 条件请求
+- **订阅管理页**：网页版可查看、添加、删除订阅源，粘贴任意网址自动查找可用 feed，并显示每个源命中的解析策略
+- **智能识别**：策略模式识别 22 种来源（少数派、36氪、阮一峰等），按来源提取正文
+- **干净输出**：剥离脚本与广告，套响应式模板，图片本地化到 `assets/`
+- **AI 摘要**：DeepSeek API 生成摘要，注入文章页
+- **网页版界面**：纯标准库本地 HTTP 服务，含归档日历、执行日志独立页面、进度与上次运行摘要
 
-## 🖥 截图
+## 🖥 界面截图
 
-![本地网页版界面](doc/assets/webui.png)
-
-## 📦 安装
-
-### 环境要求
-
-- Python 3.10+
-- Node.js v24+（获取文章列表依赖 `folocli`；v24 的 `NODE_USE_ENV_PROXY` 才能让 fetch 走系统代理）
-- Folo CLI 已登录：`npx folocli@latest login`
-
-### 步骤
-
-```bash
-# 1. 克隆仓库
-git clone https://github.com/ZerosZhang/FoloArchive.git
-cd FoloArchive
-
-# 2. 创建虚拟环境并安装依赖
-python -m venv .venv
-.venv/Scripts/pip install -r requirements.txt    # Windows
-# .venv/bin/pip install -r requirements.txt      # Linux/macOS
-
-# 3. 配置 DeepSeek API
-cp src/config.example.json src/config.json
-# 编辑 src/config.json 填入 api_key
-```
-
-`config.json` 还可选配 `schedule`（每日定时）与 `mail`（失败邮件）两段，见 `src/config.example.json`。
+![主页](doc/assets/webui.png)
 
 ## 🚀 使用
 
-### 桌面小窗口（推荐，无终端黑框）
+### 桌面小窗口
 
-双击 `启动Folo.bat`，弹出一个只有三个按钮的小窗口：**今日归档 / 打开 web 页面 / 退出服务**。窗口不显示日志，进度与日志都在网页版界面里看。
+双击 `启动控制台.bat`，弹出只有两个按钮的小窗口：**打开 web 页面 / 退出服务**。归档操作都在网页版里完成。
 
-- 用 `pythonw.exe` 启动，不会留下控制台窗口
-- **关闭窗口不会退出**：窗口收进系统托盘继续后台跑（每日定时照常生效），右键托盘图标可「打开主窗口 / 今日归档 / 退出」，双击图标唤回窗口
-- 要彻底退出，用托盘右键的「退出」或窗口里的「退出服务」按钮
+- 用 `pythonw.exe` 启动，不留控制台窗口
+- **关闭窗口不会退出**：收进系统托盘继续后台跑，每日定时照常生效；右键托盘可「打开主窗口 / 退出」
+- 彻底退出用托盘右键「退出」或窗口里的「退出服务」
 
-> 需要 Python 自带 `tkinter`（python.org 安装程序默认勾选「tcl/tk and IDLE」）。若缺失，可改用下面的网页版模式，或重跑安装程序 → Modify → 勾选后重建 `.venv`。
+> 需要 Python 自带 `tkinter`；缺失时可用命令行方式运行 `src/webui.py`。
 
 ```bash
-.venv/Scripts/pythonw.exe src/gui.py           # 等价于双击 启动Folo.bat
+.venv/Scripts/pythonw.exe src/gui.py              # 等价于双击 启动控制台.bat
 .venv/Scripts/python.exe  src/gui.py --port 9000   # 带控制台，便于排查
 ```
 
-### 网页版界面（无需 tkinter / 服务器适用）
+### 添加订阅源
 
-```bash
-.venv/Scripts/python.exe src/webui.py          # 默认 127.0.0.1:8765，自动打开浏览器
-# 或双击 启动Web界面.bat（控制台模式，Ctrl+C 退出）
+两种方式：
+
+1. 网页版右上角 **⚙ 订阅配置** → 粘贴地址 → 查找 → 添加（支持原生 RSS/Atom 地址、RSSHub 路由）
+2. 直接编辑 `src/watch_feeds.json`（首次使用可从 `src/watch_feeds.example.json` 复制）：
+
+```json
+{
+  "feeds": [
+    { "name": "少数派", "url": "https://sspai.com/feed" }
+  ]
+}
 ```
 
-- 勾选要执行的步骤，选择日期，点击「开始执行」，页面实时显示日志、进度与各步骤耗时
-- 内置「阅读状态日历」（原热力图）：格子按天三态显示——灰=无归档、绿=未读、蓝=已读；鼠标悬停看日期与篇数，单击在新标签页打开当天总览并标记为已读，Shift/Alt+单击只切换已读状态（合并 `result/` 与 `result/归档/`）。桌面显示最近一年，平板/手机按屏幕宽度缩短为半年以内，不会出现横向滚动条；页首用一行说明定时归档时间
-- 归档完成后，若存在失败项且已配置 `mail` 段，会发送失败邮件通知
-- 网页版内置每日定时（`config.json` 的 `schedule` 段），一个进程即可；也可用 `python src/scheduler.py` 独立运行（两者互斥，不会重复）。加 `--no-schedule` 可关闭内建定时
+![订阅配置](doc/assets/config.png)
 
-### CLI
-
-```bash
-.venv/Scripts/python.exe src/archive.py                # 完整执行 4 个步骤
-.venv/Scripts/python.exe src/archive.py --start-step 4 # 从第 4 步断点续跑
-.venv/Scripts/python.exe src/archive.py --only-step 3  # 仅执行渲染步骤
-.venv/Scripts/python.exe src/archive.py --date "2026年07月07日"
-```
+> 首次检查某个源时只记基线，不会把历史文章一次性全部归档。
 
 ## 🔄 工作原理
 
+一次归档分四步，串行执行；任何一步失败都不会中断其他源/文章，失败项会在日志和索引页里标注。
+
 ```
-获取未读列表 → 下载原始 HTML → 渲染干净 HTML → AI 摘要 + 索引页
+检查订阅更新 → 下载原始 HTML → 渲染干净 HTML → AI 摘要 + 索引页
     │              │                │                │
- folo_export   save_webpages    render_html       summarize
-（result/temp_data）（temp_data/raw/日期）（result/日期/*.html）（摘要区块 + 每日索引）
+ watch_export   save_webpages    render_html       summarize
 ```
 
-- 文章保存为 `「来源」标题.html`，图片本地化到同级 `assets/`
-- 每日自动生成按来源分组的索引页 `YYYY年MM月DD日.html`
-- 支持 22 种来源解析策略，详见 [doc/strategies.md](doc/strategies.md)
+### 1. 检查订阅更新（watch_export）
 
-## 📚 文档
+- 读取 `src/watch_feeds.json` 的订阅列表，逐条发请求
+- 带 `ETag` / `Last-Modified` 条件请求，源站返回 304 就直接跳过，几乎零流量
+- 解析出条目的唯一 ID（优先源站的 `id`/`guid`，没有则用链接或标题+时间的哈希）
+- 与本地数据库 `result/temp_data/watch.db` 比对，**没见过的才算新文章**
+- 新条目写进数据库和当天的 `result/temp_data/「日期」.json`，供后续步骤使用
+- 网络抖动会自动重试一次；单个源失败只影响该源
 
-| 模块 | 文档 |
-|------|------|
-| 全部模块说明 | [doc/](doc/) |
-| 来源策略 | [doc/strategies.md](doc/strategies.md) |
-| 核心流程 | [doc/archive_core.md](doc/archive_core.md) |
-| 桌面小窗口 | [doc/gui.md](doc/gui.md) |
-| 系统托盘图标 | [doc/trayicon.md](doc/trayicon.md) |
-| 网页版界面 | [doc/webui.md](doc/webui.md) |
-| 热力图 | [doc/heatmap.md](doc/heatmap.md) |
-| 失败邮件 | [doc/notify.md](doc/notify.md) |
+> 某个源第一次被检查时，现有条目全部记为基线，不当作更新——避免第一次就归档几百篇旧文。
 
-## 🧩 支持的来源
+### 2. 下载原始 HTML（save_webpages）
 
-碎言、少数派、小众软件、异次元软件世界、阮一峰的网络日志、seangoedecke.com、Matthias Endler、偷懒爱好者周刊、龙爪槐守望者、宝玉的博客、土猛的员外、36氪、423Down、潮流周刊、Hexo博客、HelloGithub - 精选开源项目、寒流の编程笔记、子舒的博客、莫比乌斯、王志勇-和平海底、独立开发变现周刊、Blog Yu Gao
+- 按当天 JSON 里的原文链接逐篇下载，存到 `result/temp_data/raw/<日期>/`
+- 统一带浏览器 UA，部分站点补 Referer；下载失败记录原因并跳过
+- 文件名统一成 `「来源」标题.html`，去掉非法字符、超长截断
 
-## 🛠 技术栈
+### 3. 渲染干净 HTML（render_html）
 
-- Python 3.10+（标准库为主）
-- 桌面小窗口（标准库 `tkinter`，需 Python 安装时保留 tcl/tk）
-- 本地网页版界面（标准库 `http.server`，零第三方依赖）
-- DeepSeek API（AI 摘要）
-- Node.js `folocli`（获取 Folo 未读列表）
+- 按站点识别解析策略（内置 22 种，未命中则用通用策略）
+- 剥离 `<script>` / `<style>` / `<iframe>`、`on*` 事件属性、`javascript:` 链接
+- 套响应式模板，样式统一外链到 `result/style.css`（改一处，所有页面生效）
+- 正文里的图片下载到同级 `assets/`，离线也能看
+- 输出到 `result/<日期>/「来源」标题.html`
 
+### 4. AI 摘要 + 索引页（summarize）
+
+- 调用 DeepSeek API 为每篇生成摘要，注入文章页的摘要区块
+- **断点续跑**：已有摘要的文章直接跳过，不重复消耗 token；加 `--force` 才全部重算
+- 并发 10 篇，请求失败按指数退避重试
+- 最后生成当天索引页 `result/<日期>/<日期>.html`：按来源分组，列出标题、原文链接与摘要；下载/渲染失败的条目就地标注，不会从索引里消失
+
+### 产物结构
+
+```
+result/
+├── style.css                     # 全站共享样式
+├── read_state.json               # 阅读状态（日历用）
+├── temp_data/
+│   ├── watch.db                  # 已见条目（去重状态）
+│   ├── 「日期」.json              # 当天的文章列表
+│   └── raw/<日期>/               # 下载的原始 HTML（中间产物）
+└── <日期>/
+    ├── YYYY年MM月DD日.html        # 当天索引页
+    ├── 「来源」标题.html           # 文章正文
+    └── assets/                   # 文章图片
+```
+
+### 触发方式与幂等
+
+- **手动**：网页版勾选步骤 → 开始执行
+- **定时**：默认每天 08:00（`config.json` 的 `schedule`），到点时程序在运行才触发；启动时若已过点不会补跑
+- **断点续跑**：同一天重跑会复用已下载的列表和已生成的摘要，只补失败或缺失的部分
+- 当天列表 JSON 已存在时，步骤 1 会跳过抓取——想强制重抓，删掉该 JSON 或用 `--date` 指定其他日期
 ## 📄 许可证
 
 [MIT](LICENSE)
-
-## 🙏 致谢
-
-- [Folo](https://folo.cn) — 阅读工具与 CLI

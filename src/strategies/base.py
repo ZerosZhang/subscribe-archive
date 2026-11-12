@@ -47,6 +47,42 @@ def resolve_strategy(html_text: str, filename_hint: str = ""):
     return None
 
 
+def strategy_domains(strategy):
+    """从策略 detect() 的源码里提取域名提示（如 sspai.com）
+
+    只用于展示/判断「这条订阅有没有专用策略」，不参与真实转换。
+    """
+    import inspect
+    import re
+
+    try:
+        source = inspect.getsource(strategy.detect)
+    except (OSError, TypeError):
+        return set()
+    return set(re.findall(
+        r"[a-z0-9-]+\.(?:com|cn|net|org|io|cc|me|dev|app|info|xyz|blog)\b", source))
+
+
+def resolve_strategy_for_feed(url, name=""):
+    """按订阅地址与名称判断归档时会用哪个专用策略，没有则返回 None
+
+    规则与 resolve_strategy 一致（注册顺序 + 名称优先），只是拿不到文章 HTML，
+    因此用名称提示与网域做近似判断。
+    """
+    from urllib.parse import urlsplit
+
+    host = (urlsplit(url or "").netloc or "").lower()
+    for strategy in _STRATEGIES:
+        try:
+            if name and strategy.detect("", name):
+                return strategy
+        except Exception:  # noqa: BLE001 - 检测函数不应影响页面
+            continue
+        if host and any(domain in host for domain in strategy_domains(strategy)):
+            return strategy
+    return None
+
+
 # =============================================================================
 
 

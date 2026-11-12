@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Folo 文章归档 —— 本地网页版界面（纯标准库实现）
+订阅文章归档 —— 本地网页版界面（纯标准库实现）
 
 用途：项目唯一的图形界面。用浏览器访问一个本地 HTTP 服务完成归档工作：
 手动归档、实时日志、进度条、耗时统计、失败邮件、归档热力图，以及每日定时
@@ -52,7 +52,7 @@ fix_encoding()
 from archive_core import STEPS      # noqa: E402
 import heatmap                      # noqa: E402
 import notify                       # noqa: E402
-from webui_page import PAGE         # noqa: E402
+from webui_page import PAGE, CONFIG_PAGE, LOGS_PAGE    # noqa: E402
 
 DEFAULT_HOST = "127.0.0.1"
 DEFAULT_PORT = 8765
@@ -174,6 +174,44 @@ def _should_stop():
         return bool(_STATE["should_stop"])
 
 
+# =============================================================================
+# 上次运行摘要（持久化 result/last_run.json）
+# =============================================================================
+LAST_RUN_PATH = OUTPUT_BASE_DIR / "last_run.json"
+
+
+def load_last_run():
+    """读取上次运行摘要；缺失/损坏返回 {}"""
+    try:
+        with open(LAST_RUN_PATH, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def _save_last_run(date_str, result):
+    """记录本次运行结果：时间、日期、篇数、耗时、失败项"""
+    article_list = (result or {}).get("article_list") or []
+    payload = {
+        "finished_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+        "date": date_str,
+        "articles": len(article_list),
+        "running": False,
+        "error": (result or {}).get("error") or "",
+        "failures": list((result or {}).get("failures") or []),
+        "step_times": dict((result or {}).get("step_times") or {}),
+    }
+    try:
+        LAST_RUN_PATH.parent.mkdir(parents=True, exist_ok=True)
+        tmp = LAST_RUN_PATH.with_suffix(".tmp")
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2)
+        os.replace(tmp, LAST_RUN_PATH)
+    except OSError as exc:
+        LOG.append(f"⚠️ 上次运行摘要写入失败: {exc}")
+
+
 def _run_worker(steps, date_str):
     """后台线程：执行归档 → 刷新状态 → 失败通知"""
     result = None
@@ -199,6 +237,7 @@ def _run_worker(steps, date_str):
             _STATE["progress_text"] = "完成"
             _STATE["running"] = False
         LOG.append("[WebUI] 归档线程结束")
+        _save_last_run(date_str, result)
 
     if result is not None:
         _notify_failures(date_str, result.get("failures") or [], result.get("step_times") or {})
@@ -218,7 +257,7 @@ def _notify_failures(today, failures, step_times):
         LOG.append("⚠️ 本次存在失败，但未配置邮件通知（config.json 的 mail 段缺失或未启用）")
         return
     try:
-        subject = f"[Folo 归档失败] {today} 共 {len(failures)} 项"
+        subject = f"[订阅归档失败] {today} 共 {len(failures)} 项"
         body = notify.format_failure_report(today, failures, step_times)
         ok, err = notify.send_failure_mail(cfg, subject, body)
         if ok:
@@ -307,11 +346,16 @@ def _normalize_steps(raw):
     return sorted(out)
 
 
-def start_run(steps, date_str):
-    """校验并启动后台归档线程，返回 (ok, error)"""
+def start_run(steps, date_str=None):
+    """校验并启动后台归档线程，返回 (ok, error)
+
+    date_str 省略时一律归档今天（网页端不再提供日期选择）。
+    """
     steps = _normalize_steps(steps)
     if not steps:
         return False, "请至少选择一个步骤"
+    if not date_str:
+        date_str = datetime.now().strftime("%Y年%m月%d日")
     if not _valid_date(date_str):
         return False, "日期格式无效，应为 YYYY年MM月DD日"
 
@@ -490,7 +534,7 @@ _SCHED_LOCK = threading.Lock()
 _SCHED_CACHE = {"at": 0.0, "data": None}
 
 # 与 scheduler.py 的 MUTEX_NAME 一致，两者靠它互斥
-SCHEDULER_MUTEX = "FoloArchiveScheduler"
+SCHEDULER_MUTEX = "SubscribeArchiveScheduler"
 SCHEDULE_CHECK_INTERVAL = 20               # 秒，调度线程轮询间隔
 _SCHEDULE_TIME_RE = re.compile(r"^\d{1,2}:\d{2}$")
 
@@ -585,6 +629,13 @@ def _schedule_worker():
     任何异常都只记日志，绝不让线程退出。
     """
     global _SCHED_LAST_RUN_DATE
+
+    # 启动时若已过今天的定时点，不补跑（只在定时点真正到达时触发）
+    enabled, at = _scheduler_config()
+    if enabled and datetime.now() >= _target_today(at):
+        _SCHED_LAST_RUN_DATE = datetime.now().strftime("%Y年%m月%d日")
+        LOG.append(f"[WebUI] 定时：启动时已过今天 {at} 的定时点，跳过本次（明天照常）")
+
     while True:
         try:
             enabled, at = _scheduler_config()
@@ -682,7 +733,7 @@ def get_schedule(force=False):
 # HTTP 服务
 # =============================================================================
 class Handler(BaseHTTPRequestHandler):
-    server_version = "FoloWebUI/1.0"
+    server_version = "SubscribeWebUI/1.0"
     protocol_version = "HTTP/1.1"
 
     def log_message(self, fmt, *args):
@@ -742,6 +793,14 @@ class Handler(BaseHTTPRequestHandler):
         path = parsed.path
         if path in ("/", "/index.html"):
             return self._send_bytes(PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        if path == "/config":
+            return self._send_bytes(CONFIG_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        if path == "/logs":
+            return self._send_bytes(LOGS_PAGE.encode("utf-8"), "text/html; charset=utf-8")
+        if path == "/api/last":
+            return self._send_json(load_last_run())
+        if path == "/api/feeds":
+            return self._send_json(feeds_payload())
         if path.startswith("/archive/"):
             return self._serve_archive(path)
         if path == "/api/state":
@@ -778,12 +837,53 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send_json({"ok": False, "error": "read 字段应为布尔值"})
             ok, error = set_read_state(body.get("date"), read)
             return self._send_json({"ok": ok, "error": error})
+        if path == "/api/discover":
+            from watch_export import discover_feeds
+            candidates, error = discover_feeds(body.get("url"))
+            return self._send_json({"ok": error is None, "candidates": candidates,
+                                    "error": error})
+        if path == "/api/feeds":
+            action = body.get("action")
+            url = body.get("url")
+            from watch_export import add_feed, remove_feed
+            if action == "add":
+                ok, message = add_feed(url)
+            elif action == "remove":
+                ok, message = remove_feed(url)
+            else:
+                ok, message = False, "action 应为 add 或 remove"
+            return self._send_json({"ok": ok, "message": message,
+                                    "feeds": feeds_payload()["feeds"]})
         return self._send_json({"ok": False, "error": "未知路径"}, status=404)
 
 
 # =============================================================================
 # 配置与启动
 # =============================================================================
+def feeds_payload():
+    """配置页数据：订阅列表 + 每项的检查状态与归档策略
+
+    缺 feedparser 等依赖时也要能打开页面，因此把异常收敛成 error 字段。
+    """
+    try:
+        from watch_export import list_feeds_state
+        feeds = list_feeds_state()
+        error = None
+    except Exception as exc:  # noqa: BLE001 - 页面要能显示原因而不是白屏
+        feeds, error = [], f"读取订阅失败：{exc}"
+
+    try:
+        from strategies import resolve_strategy_for_feed
+        for feed in feeds:
+            strategy = resolve_strategy_for_feed(feed["url"], feed["name"])
+            feed["strategy"] = strategy.name if strategy else ""
+    except Exception:  # noqa: BLE001 - 策略判断失败不影响列表
+        for feed in feeds:
+            feed.setdefault("strategy", "")
+
+    return {"ok": error is None, "feeds": feeds, "error": error}
+
+
 def _load_web_config():
     """读取 config.json 的 web 段（可选），任何异常都安全回退到空 dict
 
@@ -888,7 +988,7 @@ def start_service(host=None, port=None, schedule=True, mirror=None):
 
     url = _display_url(host, port)
     LOG.append("=" * 60)
-    LOG.append(f"Folo 网页版界面已启动：{url}")
+    LOG.append(f"订阅归档网页版已启动：{url}")
     LOG.append("=" * 60)
 
     if schedule:
@@ -901,7 +1001,7 @@ def start_service(host=None, port=None, schedule=True, mirror=None):
 
 def parse_args():
     parser = argparse.ArgumentParser(
-        description="Folo 文章归档 —— 本地网页版界面（纯标准库）",
+        description="订阅文章归档 —— 本地网页版界面（纯标准库）",
     )
     parser.add_argument("--host", default=None, help="监听地址（默认 127.0.0.1，可被 config.json 的 web.host 覆盖默认值）")
     parser.add_argument("--port", type=int, default=None, help="监听端口（默认 8765）")
