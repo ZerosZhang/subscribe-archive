@@ -445,8 +445,11 @@ def remove_feed(url):
     return True, "已删除"
 
 
-def list_trend_entries(limit=30):
-    """列出「仅链接」订阅（archive=false）的最新条目，供热榜页面展示"""
+def list_trend_entries(limit=30, date=None):
+    """列出「仅链接」订阅（archive=false）的条目
+
+    date 传入 "YYYY年MM月DD日" 时只取该日抓到的条目；该日没有则回退为最新若干条。
+    """
     conn = _connect()
     try:
         result = []
@@ -454,15 +457,29 @@ def list_trend_entries(limit=30):
             if feed.get("archive", True) is not False:
                 continue
             url = feed["url"].strip()
-            rows = conn.execute(
-                """
-                SELECT title, link, published FROM entries
-                WHERE feed_url = ?
-                ORDER BY published DESC, id DESC
-                LIMIT ?
-                """,
-                (url, limit),
-            ).fetchall()
+            rows = []
+            if date:
+                # first_seen 形如 "2026-11-13 08:00:00"
+                prefix = (date.replace("年", "-").replace("月", "-").replace("日", "")) + "%"
+                rows = conn.execute(
+                    """
+                    SELECT title, link, published FROM entries
+                    WHERE feed_url = ? AND first_seen LIKE ?
+                    ORDER BY published DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (url, prefix, limit),
+                ).fetchall()
+            if not rows:
+                rows = conn.execute(
+                    """
+                    SELECT title, link, published FROM entries
+                    WHERE feed_url = ?
+                    ORDER BY published DESC, id DESC
+                    LIMIT ?
+                    """,
+                    (url, limit),
+                ).fetchall()
             result.append({
                 "name": feed.get("name") or url,
                 "url": url,

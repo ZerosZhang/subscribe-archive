@@ -274,6 +274,31 @@ def _write_index_page(today, index_path, entries):
             parts.append(f'<li class="index-item">{anchor}{body}</li>')
         parts.append("</ul>")
 
+    # 热榜（archive=false 的订阅）：只列标题和原文链接，不参与下载
+    try:
+        from watch_export import list_trend_entries
+        trend_feeds = list_trend_entries(limit=5, date=today)
+    except Exception as exc:  # noqa: BLE001 - 热榜失败不影响索引页
+        print(f"⚠️  热榜条目读取失败：{exc}")
+        trend_feeds = []
+
+    if trend_feeds:
+        parts.append('<h2 class="index-source">热榜（仅链接）</h2>')
+        for feed in trend_feeds:
+            parts.append(f'<h3 class="index-source">{html_escape(feed["name"])}</h3>')
+            parts.append('<ul class="index-list">')
+            for item in feed["entries"]:
+                when = (item.get("published") or "").replace("T", " ")[:16]
+                parts.append(
+                    '<li class="index-item">'
+                    f'<a href="{html_escape(item.get("link") or "", quote=True)}"'
+                    f' target="_blank" rel="noopener noreferrer">'
+                    f'{html_escape(item.get("title") or "无标题")}</a>'
+                    f'<div class="digest">原文：{html_escape(item.get("link") or "")}'
+                    f'{(" · " + html_escape(when)) if when else ""}</div>'
+                    '</li>'
+                )
+            parts.append('</ul>')
     page = render_document(f"{today} 归档", "\n".join(parts))
     write_style_sheet(index_path.parent)
     index_path.write_text(page, encoding="utf-8")
