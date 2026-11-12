@@ -83,6 +83,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
 .linkbtn + .linkbtn{margin-right:12px}
 .last-line{color:#1f883d}
 .last-line.err-line{color:#cf222e}
+.err-line{color:#cf222e}
 </style>
 </head>
 <body>
@@ -93,6 +94,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
   </h1>
   <p class="sched-line" id="sched-line">每天 08:00 自动归档</p>
   <p class="sched-line last-line" id="last-line">上次运行：暂无记录</p>
+  <p class="sched-line err-line" id="feed-alert" style="display:none"></p>
 
   <div class="layout">
   <section class="card">
@@ -305,7 +307,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
 
     if(st.schedule){ renderSchedule(st.schedule); }
 
-    if(lastRunning && !st.running){ refreshCalendar(); refreshSchedule(true); refreshLast(); }
+    if(lastRunning && !st.running){ refreshCalendar(); refreshSchedule(true); refreshLast(); refreshHealth(); }
     lastRunning = !!st.running;
   }
 
@@ -340,6 +342,19 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
     line.textContent = text;
     line.className = "sched-line last-line" + (bad ? " err-line" : "");
   }
+  function refreshHealth(){
+    fetch("/api/health").then(function(r){ return r.json(); }).then(function(d){
+      var node = el("feed-alert");
+      var bad = (d && d.failures) || [];
+      if(!bad.length){ node.style.display = "none"; node.textContent = ""; return; }
+      var names = bad.map(function(x){ return x.name || x.url; }).slice(0, 6);
+      var more = bad.length > names.length ? " 等 " + bad.length + " 个" : "";
+      node.style.display = "";
+      node.innerHTML = "⚠️ 订阅链接异常：" + names.map(escapeHtml).join("、") + more +
+        ' · <a href="/config">查看订阅配置</a>';
+    }).catch(function(){});
+  }
+
   function refreshLast(){
     fetch("/api/last").then(function(r){ return r.json(); }).then(renderLast).catch(function(){});
   }
@@ -396,6 +411,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
   refreshCalendar();
   refreshSchedule(false);
   refreshLast();
+  refreshHealth();
   poll();
   setInterval(poll, 1000);
   setInterval(function(){ refreshSchedule(false); }, 30000);

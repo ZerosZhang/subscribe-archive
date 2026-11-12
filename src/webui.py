@@ -801,6 +801,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_bytes(LOGS_PAGE.encode("utf-8"), "text/html; charset=utf-8")
         if path == "/api/last":
             return self._send_json(load_last_run())
+        if path == "/api/health":
+            return self._send_json(load_last_check())
         if path == "/api/feeds":
             return self._send_json(feeds_payload())
         if path.startswith("/archive/"):
@@ -866,6 +868,21 @@ class Handler(BaseHTTPRequestHandler):
 # =============================================================================
 # 配置与启动
 # =============================================================================
+def load_last_check():
+    """上次订阅检查的异常列表（watch_export 写入 last_check.json）"""
+    path = TEMP_DIR / "last_check.json"
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = json.load(f)
+    except (OSError, ValueError):
+        return {"checked_at": "", "failures": []}
+    if not isinstance(data, dict):
+        return {"checked_at": "", "failures": []}
+    failures = data.get("failures")
+    return {"checked_at": data.get("checked_at") or "",
+            "failures": failures if isinstance(failures, list) else []}
+
+
 def feeds_payload():
     """配置页数据：订阅列表 + 每项的检查状态与归档策略
 

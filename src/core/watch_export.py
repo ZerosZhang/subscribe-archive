@@ -9,6 +9,7 @@
 
 import hashlib
 import json
+import os
 import sqlite3
 import sys
 import time
@@ -543,6 +544,18 @@ def list_trend_entries(limit=30, date=None):
         conn.close()
 
 
+def _write_last_check(failures):
+    """记录本次检查结果（供网页版展示链接异常）"""
+    path = TEMP_DIR / "last_check.json"
+    tmp = path.with_suffix(".json.tmp")
+    data = {"checked_at": _now_text(), "failures": failures}
+    try:
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2), encoding="utf-8")
+        os.replace(tmp, path)
+    except OSError as exc:
+        print(f"⚠️  检查结果写入失败：{exc}")
+
+
 def export_articles(skip_auth_check=False):
     """检查所有订阅，把新增文章写成 temp_data/「日期」.json
 
@@ -559,6 +572,7 @@ def export_articles(skip_auth_check=False):
     conn = _connect()
     article_list = []
     failures = []
+    failure_items = []
     try:
         for feed in feeds:
             try:
@@ -569,9 +583,15 @@ def export_articles(skip_auth_check=False):
             article_list.extend(articles)
             if failure:
                 failures.append(failure)
+                failure_items.append({
+                    "name": feed.get("name") or feed["url"],
+                    "url": feed["url"],
+                    "error": failure,
+                })
     finally:
         conn.close()
 
+    _write_last_check(failure_items)
     failure_reason = "；".join(failures) if failures else None
 
     if not article_list:
