@@ -313,7 +313,7 @@ The engineer said, "This is a 'just-say-no' archetype."
 
 ## 11. HTML 标签使用限制
 
-> **适用范围注记**：本规范面向项目中的 `.md` 文档（如 `doc/`、`skills/`）。归档管线自改造后**不再产出 Markdown**，而是输出干净 HTML（见 `src/core/render_html.py`、`doc/render_html.md`），其产物不受本节「避免嵌入 HTML」约束。
+> **适用范围注记**：本规范面向项目中的 `.md` 文档（如 `doc/`、`.agents/skills/`）。归档管线自改造后**不再产出 Markdown**，而是输出干净 HTML（见 `src/core/render_html.py`、`doc/render_html.md`），其产物不受本节「避免嵌入 HTML」约束。
 
 - **优先使用纯 Markdown 语法**，避免嵌入 HTML。
 - 仅在以下情况允许使用 HTML：

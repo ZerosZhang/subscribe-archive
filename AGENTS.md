@@ -41,7 +41,7 @@ D:\AgentCode\Project\「2026年10月28日」WindowsServer操作\ZerosServer连�
 │   │   ├── YYYY年MM月DD日.html  # 当天汇总索引页（同样外链 ../style.css）
 │   │   └── assets/              # 本地化图片
 │   └── style.css                # 公共样式表：所有日期、所有页面共用这一份，改一处全体生效
-├── skills/                      # Kimi Skill 定义
+├── .agents/skills/              # 项目级 Skill（自动被发现）
 │   ├── SummaryDaily/SKILL.md    # 每日总结 Skill（权威参考）
 │   ├── MarkdownFormat/SKILL.md
 └── src/                         # 源码
@@ -293,7 +293,7 @@ python -m venv .venv
 
 ## SummaryDaily Skill（重要规则）
 
-每日汇总现已由管线自动生成：步骤 4 在 `result/<日期>/` 下产出 HTML 索引页 `YYYY年MM月DD日.html`（按来源分组，每篇给出链接与摘要；摘要按 AI 原文分行渲染，概括 / 背景 / 观点 各占一行，不压成一整段）。索引页**以 `result/temp_data/「日期」.json` 的条目为准**（JSON 多少条就列多少条），下载/渲染/摘要失败的条目在页内就地标注，没有成品 HTML 时标题直链原文 URL。需要人工重做或修正时，遵循 `skills/SummaryDaily/SKILL.md`。核心约束：
+每日汇总现已由管线自动生成：步骤 4 在 `result/<日期>/` 下产出 HTML 索引页 `YYYY年MM月DD日.html`（按来源分组，每篇给出链接与摘要；摘要按 AI 原文分行渲染，概括 / 背景 / 观点 各占一行，不压成一整段）。索引页**以 `result/temp_data/「日期」.json` 的条目为准**（JSON 多少条就列多少条），下载/渲染/摘要失败的条目在页内就地标注，没有成品 HTML 时标题直链原文 URL。需要人工重做或修正时，遵循 `.agents/skills/SummaryDaily/SKILL.md`。核心约束：
 
 1. **不创建新脚本**——项目脚本已完备
 2. **逐篇阅读全文**——不跳过，不截断，不依赖之前的读取结果
