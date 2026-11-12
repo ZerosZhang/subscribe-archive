@@ -16,7 +16,7 @@ PAGE = r"""<!DOCTYPE html>
 *{box-sizing:border-box}
 :root{--cell:12px;--gap:2px}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-     background:#f6f8fa;color:#24292f;font-size:14px}
+     font-family:sans-serif;background:#f6f8fa;color:#24292f;font-size:14px}
 .wrap{width:100%;max-width:1180px;margin:auto;padding:16px}
 h1{font-size:20px;margin:10px 0 16px}
 h1 .sub{font-size:12px;font-weight:normal;color:#57606a;border:1px solid #d0d7de;
@@ -417,7 +417,7 @@ CONFIG_PAGE = r"""<!DOCTYPE html>
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-     background:#f6f8fa;color:#24292f;font-size:14px}
+     font-family:sans-serif;background:#f6f8fa;color:#24292f;font-size:14px}
 .wrap{width:100%;max-width:1180px;margin:auto;padding:16px}
 h1{font-size:20px;margin:10px 0 8px}
 h1 .sub{font-size:12px;font-weight:normal;color:#57606a;border:1px solid #d0d7de;
@@ -640,7 +640,7 @@ LOGS_PAGE = r"""<!DOCTYPE html>
 <style>
 *{box-sizing:border-box}
 body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;
-     background:#f6f8fa;color:#24292f;font-size:14px}
+     font-family:sans-serif;background:#f6f8fa;color:#24292f;font-size:14px}
 .wrap{width:100%;max-width:1180px;margin:auto;padding:16px}
 h1{font-size:20px;margin:10px 0 8px}
 .linkbtn{float:right;font-size:14px;font-weight:normal;color:#0969da;text-decoration:none;

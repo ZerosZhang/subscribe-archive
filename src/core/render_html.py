@@ -50,7 +50,7 @@ BASE_CSS = """
 * { box-sizing: border-box; }
 body {
   margin: 0; padding: 16px;
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-family: sans-serif;   /* 跟随浏览器「无衬线字体」设置 */
   line-height: 1.7; font-size: 16px; color: #1a1a1a; background: #f5f5f5;
 }
 .wrap { max-width: 1140px; margin: 0 auto; background: #fff; padding: 24px; border-radius: 8px; }
@@ -63,7 +63,7 @@ body {
 .article-body img, .article-body video { max-width: 100%; height: auto; }
 .article-body img { border-radius: 4px; }
 .article-body pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
-.article-body code { font-family: ui-monospace, Consolas, "Microsoft YaHei", monospace; font-size: 0.9em; }
+.article-body code { font-family: monospace; font-size: 0.9em; }
 .article-body :not(pre) > code { background: #f0f0f0; padding: 1px 4px; border-radius: 3px; }
 .article-body blockquote { margin: 12px 0; padding: 4px 16px; border-left: 3px solid #ddd; color: #555; }
 .article-body table { border-collapse: collapse; display: block; overflow-x: auto; max-width: 100%; }
