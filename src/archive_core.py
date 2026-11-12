@@ -273,7 +273,7 @@ def _write_index_page(today, index_path, entries):
 
 
 def _summarize_step(today, log, article_list=None, missing_notes=None, should_stop=None,
-                    force=False):
+                    force=False, skip_ai=False):
     """步骤 4：AI 生成文章摘要并生成当日索引页
 
     已有摘要的文章默认跳过（断点续跑，只补没摘要的那几篇）；force=True 时全部重算。
@@ -302,13 +302,19 @@ def _summarize_step(today, log, article_list=None, missing_notes=None, should_st
     processed = 0
     skipped = 0
 
-    try:
-        config = load_config()
-    except SystemExit:
-        config = None
-        log("⚠️  未找到 config.json 或配置无效，本次不生成 AI 摘要（索引页仍会生成）")
+    config = None
+    if skip_ai:
+        log("已选择跳过 AI 摘要，只生成索引页")
+    else:
+        try:
+            config = load_config()
+        except SystemExit:
+            config = None
+            log("⚠️  未找到 config.json 或配置无效，本次不生成 AI 摘要（索引页仍会生成）")
 
-    if not html_files:
+    if skip_ai:
+        pass
+    elif not html_files:
         log("⚠️  没有找到可总结的 .html 文件，索引页将按文章列表生成并标注缺失项")
     elif config is None:
         for html_file in html_files:
@@ -378,7 +384,8 @@ def _summarize_step(today, log, article_list=None, missing_notes=None, should_st
             "index_error": index_error}
 
 
-def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):
+def run_archive(selected_steps, today, log, on_progress=None, should_stop=None,
+                skip_ai=False):
     """执行归档流程
 
     参数:
@@ -533,7 +540,8 @@ def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):
             on_progress(80, "步骤 4: AI 摘要...")
 
         step_start = time.time()
-        summary_result = _summarize_step(today, log, article_list, missing_notes, should_stop)
+        summary_result = _summarize_step(today, log, article_list, missing_notes, should_stop,
+                                         skip_ai=skip_ai)
         step_times[4] = time.time() - step_start
         log(f"  ⏱ 耗时: {format_duration(step_times[4])}")
 

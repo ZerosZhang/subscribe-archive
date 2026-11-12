@@ -47,6 +47,8 @@ def parse_args():
                         help="列出所有步骤及编号")
     parser.add_argument("--date", type=str, metavar="YYYY年MM月DD日",
                         help="指定日期（默认为今天）")
+    parser.add_argument("--skip-ai", action="store_true",
+                        help="跳过 AI 摘要，只生成索引页（不消耗 API）")
     return parser.parse_args()
 
 
@@ -124,6 +126,7 @@ def main():
         selected_steps,
         today,
         log=lambda message: print(message, flush=True),
+        skip_ai=args.skip_ai,
     )
 
     notify_failures(today, result)

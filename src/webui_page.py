@@ -41,6 +41,7 @@ button.danger{color:#cf222e;padding:6px 12px;font-size:13px;white-space:nowrap}
 input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px solid #d0d7de;border-radius:6px}
 .steps{display:flex;flex-direction:column;gap:8px;margin-bottom:10px}
 .steps label{font-size:13px;cursor:pointer;user-select:none;display:flex;align-items:center;gap:6px}
+.skip-ai{display:flex;align-items:center;gap:6px;font-size:13px;color:#57606a;margin:2px 0 10px;cursor:pointer}
 .bar{height:14px;background:#eaeef2;border-radius:7px;overflow:hidden;margin:10px 0}
 .bar > div{height:100%;width:0;background:#1f883d;transition:width .3s ease}
 #status{font-size:13px;color:#57606a}
@@ -121,6 +122,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
   <section class="card">
     <h2>手动执行</h2>
     <div class="steps" id="steps"></div>
+    <label class="skip-ai"><input type="checkbox" id="skip-ai"> 跳过 AI 摘要（只生成索引页，不消耗 API）</label>
     <div class="row">
       <button id="start" class="primary">开始执行</button>
       <button id="stop" disabled>停止</button>
@@ -372,7 +374,7 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
   });
 
   el("start").addEventListener("click", function(){
-    var payload = { steps: selectedSteps() };
+    var payload = { steps: selectedSteps(), skip_ai: el("skip-ai").checked };
     fetch("/api/run", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
