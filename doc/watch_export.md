@@ -28,6 +28,7 @@
 
 - 状态库 `result/temp_data/watch.db`（SQLite），两张表：`feeds` 存 ETag/Last-Modified/失败状态，`entries` 存已见过的 guid
 - 去重键：优先 `id` → `link` → `标题+时间` 的 sha1
+- `validate_feeds()`：逐条实抓校验订阅链接（只读，不改 ETag/状态），网页版「订阅配置 → 检测链接」和 `python src/core/watch_export.py --validate` 都调用它
 - 订阅项可加 `"archive": false`：仍然检查更新，但不交给后续下载/渲染步骤；每日索引页末尾会追加「热榜（仅链接）」小节，只有标题和原文链接（`list_trend_entries(date=...)` 取当天抓到的条目，没有则回退最新若干条）
 - 首次检查某个源时**只记基线、不当作更新**，避免第一次就把历史文章全部归档
 - `discover_feeds(url)`：从任意网址找 feed——先试地址本身，再解析网页里

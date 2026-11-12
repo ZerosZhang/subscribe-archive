@@ -464,6 +464,10 @@ table.feeds .url{font-family:monospace;font-size:12px;
 button.danger{white-space:nowrap}
 .err{color:#cf222e;font-size:12px}
 #msg{font-size:12px}
+h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
+.probe{margin-top:4px;font-size:12px;white-space:nowrap}
+.probe.ok{color:#1a7f37}
+.probe.bad{color:#cf222e;white-space:normal}
 .cand{display:flex;gap:10px;align-items:center;justify-content:space-between;
       border:1px solid #eaeef2;border-radius:6px;padding:8px 10px;margin-top:8px}
 .cand-main{min-width:0}
@@ -478,7 +482,9 @@ button.danger{white-space:nowrap}
   <p class="hint">当前列表来源：本地订阅检查 —— 这里添加的源会在下次归档时自动检查</p>
 
   <section class="card">
-    <h2>已添加的订阅源</h2>
+    <h2>已添加的订阅源
+      <button id="validate-btn" class="validate">检测链接</button>
+    </h2>
     <div class="table-scroll">
       <table class="feeds">
         <thead><tr><th>名称</th><th>地址</th><th>策略</th><th>状态</th><th></th></tr></thead>
@@ -577,6 +583,42 @@ button.danger{white-space:nowrap}
       if(data.feeds){ renderFeeds({ feeds: data.feeds }); }
       else { load(); }
     }).catch(function(e){ el("msg").textContent = "请求失败：" + e; });
+  }
+
+  el("validate-btn").addEventListener("click", function(){ validateAll(); });
+
+  function validateAll(){
+    var btn = el("validate-btn");
+    btn.disabled = true;
+    var old = btn.textContent;
+    btn.textContent = "检测中…";
+    el("msg").textContent = "正在逐条检测订阅链接，可能需要几十秒";
+    fetch("/api/validate", { method: "POST" }).then(function(r){ return r.json(); }).then(function(d){
+      var map = {};
+      (d.results || []).forEach(function(x){ map[x.url] = x; });
+      document.querySelectorAll("#feeds-body tr").forEach(function(tr){
+        var del = tr.querySelector("button[data-url]");
+        var url = del ? del.getAttribute("data-url") : "";
+        var cell = tr.children[3];
+        if(!cell){ return; }
+        var prev = cell.querySelector(".probe");
+        if(prev){ prev.remove(); }
+        var x = map[url];
+        if(!x){ return; }
+        var line = document.createElement("div");
+        line.className = "probe " + (x.ok ? "ok" : "bad");
+        line.textContent = x.ok
+          ? "链接正常 · " + x.entries + " 条 · " + x.seconds + "s"
+          : "链接异常：" + x.error;
+        cell.appendChild(line);
+      });
+      el("msg").textContent = "检测完成";
+    }).catch(function(e){
+      el("msg").textContent = "检测失败：" + e;
+    }).then(function(){
+      btn.disabled = false;
+      btn.textContent = old;
+    });
   }
 
   el("add-btn").addEventListener("click", function(){ findFeeds(); });

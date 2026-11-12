@@ -445,6 +445,58 @@ def remove_feed(url):
     return True, "已删除"
 
 
+def validate_feeds():
+    """逐条检测订阅链接是否可用（只读，不写状态库）
+
+    返回 [{name, url, ok, status, entries, error, seconds}]
+    status: ok / empty / not_modified / error
+    """
+    results = []
+    for feed in load_watch_feeds():
+        url = feed["url"].strip()
+        name = feed.get("name") or url
+        started = time.time()
+        status, entries, error = "ok", 0, None
+
+        try:
+            watcher = resolve_watcher(url)
+            if watcher is not None:
+                try:
+                    items = watcher.fetch_entries(url)
+                except Exception as exc:  # noqa: BLE001
+                    status, error = "error", str(exc)
+                else:
+                    entries = len(items)
+                    status = "ok" if entries else "empty"
+            else:
+                state, payload, _, _ = fetch_feed(url, None, None)
+                if state == "not_modified":
+                    status = "not_modified"
+                elif state == "error":
+                    status, error = "error", payload
+                else:
+                    title, items, bozo = _parse_feed(payload)
+                    entries = len(items)
+                    if entries:
+                        status = "ok"
+                    else:
+                        status = "empty"
+                        error = "内容不是有效的 feed" if bozo else "feed 为空"
+        except Exception as exc:  # noqa: BLE001 - 单条异常不影响其他
+            status, error = "error", str(exc)
+
+        results.append({
+            "name": name,
+            "url": url,
+            "ok": status in ("ok", "empty"),
+            "status": status,
+            "entries": entries,
+            "error": error,
+            "seconds": round(time.time() - started, 1),
+        })
+    return results
+
+
 def list_trend_entries(limit=30, date=None):
     """列出「仅链接」订阅（archive=false）的条目
 
@@ -539,6 +591,20 @@ def export_articles(skip_auth_check=False):
 
 
 def main():
+    if "--validate" in sys.argv:
+        rows = validate_feeds()
+        bad = 0
+        for row in rows:
+            if row["ok"]:
+                print(f"✓ {row['name']}：{row['status']} · {row['entries']} 条 · {row['seconds']}s")
+            else:
+                bad += 1
+                print(f"✗ {row['name']}：{row['error']}（{row['seconds']}s）")
+                print(f"   {row['url']}")
+        print()
+        print(f"共 {len(rows)} 个源，异常 {bad} 个")
+        return 1 if bad else 0
+
     today, article_list, output_path, failure_reason = export_articles()
     if failure_reason:
         print(f"\n失败: {failure_reason}")

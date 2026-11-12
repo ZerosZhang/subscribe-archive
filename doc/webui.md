@@ -87,6 +87,7 @@
 | POST | `/api/stop` | 请求停止当前运行 → `{ok}` |
 | POST | `/api/read` | body `{"date":"YYYY年MM月DD日", "read":true|false}` → `{ok, error}` |
 | POST | `/api/feeds` | body `{"action":"add|remove", "url":"..."}` → `{ok, message, feeds}` |
+| POST | `/api/validate` | 逐条检测订阅链接 → `{ok, results:[{name,url,ok,status,entries,error,seconds}]}`（只读，不写状态库） |
 | POST | `/api/discover` | body `{"url":"..."}` → `{ok, candidates:[{url,title}], error}`；从任意网址找可用 feed |
 
 前端约每 1 秒轮询 `/api/state` 与 `/api/logs?since=N`；归档日历在运行结束后刷新，

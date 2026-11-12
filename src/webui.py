@@ -849,6 +849,9 @@ class Handler(BaseHTTPRequestHandler):
             candidates, error = discover_feeds(body.get("url"))
             return self._send_json({"ok": error is None, "candidates": candidates,
                                     "error": error})
+        if path == "/api/validate":
+            from watch_export import validate_feeds
+            return self._send_json({"ok": True, "results": validate_feeds()})
         if path == "/api/feeds":
             action = body.get("action")
             url = body.get("url")
