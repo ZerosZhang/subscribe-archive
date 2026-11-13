@@ -41,7 +41,7 @@
 3. **提取正文**：`strategy.extract_body()` + `strategy.extract_blocks()` → `[(h2标题或None, 块HTML)]`，跳过 `skip_titles`
 4. **清洗**：剥离 `<script>/<style>/<iframe>`、`on*` 事件属性、`javascript:` 链接
 5. **套模板**：`render_document()` 输出含 `<!DOCTYPE html>`、`<meta charset>`、`<meta name="viewport">` 与外链 `../style.css` 的完整文档；`<header>` 保留来源/发布时间/原文链接，正文包在 `<article class="article-body">`，并预留 `<section class="ai-summary" data-folo="summary">` 空区块
-6. **图片本地化**：从 `<img src>`（兼容 `data-src`/`data-lazy-src`/`data-original` 懒加载属性）收集远程 URL，并发下载到 `assets/`（用 URL 摘要命名，重跑幂等），把 `src` 改写为 `./assets/xxx`；已是 `./assets/...` 或 `data:` 的图片跳过
+6. **图片本地化**：从 `<img src>`（兼容 `data-src`/`data-lazy-src`/`data-original` 懒加载属性）收集远程 URL，并发下载到 `assets/`（用 URL 摘要命名，重跑幂等），把 `src` 改写为 `./assets/xxx`；已是 `./assets/...` 或 `data:` 的图片跳过。下载并发 `IMAGE_WORKERS = 6`（并发 20+ 会触发 CDN 的 TLS 握手限流，实测大量超时），单张超时 45 秒、最多试 4 次（退避 1s/2s/3s），失败的图片在日志里列出前 5 条
 7. **写样式**：`write_style_sheet()` 把 `BASE_CSS` 落到数据根目录 `result/style.css`（内容相同则跳过）
 
 ## 输出与状态

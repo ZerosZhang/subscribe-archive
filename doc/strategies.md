@@ -56,6 +56,10 @@ _find_matching_close(html, pos)                    # 匹配 </div> 闭合位置
 - **其次 HTML 内容**：域名 + 结构标记（如 `sspai.com` + `class="article-body"`）
 - **顺序敏感**：碎言必须在少数派之前（少数派只查 `article-body` 结构，需域名 `sspai.com` 双重校验避免误判）
 
+## 特殊来源
+
+- **HelloGithub**：Next.js SPA，正文从 `__NEXT_DATA__` 的 JSON 生成。条目截图的字段是 `image_path`（形如 `/i/xxx.gif`，域名 `https://img.hellogithub.com`），没有 `image_url`；用错字段会导致页面一张图片都没有
+
 ## 新增来源步骤
 
 1. 在 `src/strategies/` 新建文件（参考现有策略），定义 `class XxxStrategy(BaseStrategy)`

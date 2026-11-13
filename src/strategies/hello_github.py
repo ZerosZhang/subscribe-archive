@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """HelloGithub 解析策略"""
 
+import html
 import re
 import json
 
 from .base import BaseStrategy, register_strategy
+
+# 条目截图实际存放在 CDN，JSON 里的 image_path 只有 /i/xxx 这一段
+IMAGE_CDN = "https://img.hellogithub.com"
 
 
 @register_strategy
@@ -35,6 +39,20 @@ class HelloGithubStrategy(BaseStrategy):
         except json.JSONDecodeError:
             return None
 
+    @staticmethod
+    def _image_url(item):
+        """条目截图地址：image_path 是 CDN 路径，需要补域名"""
+        path = (item.get("image_path") or item.get("image_url") or "").strip()
+        if not path:
+            return ""
+        if path.startswith(("http://", "https://")):
+            return path
+        if path.startswith("//"):
+            return "https:" + path
+        if path.startswith("/"):
+            return IMAGE_CDN + path
+        return ""
+
     @classmethod
     def extract_body(cls, html_text):
         data = cls._extract_json(html_text)
@@ -55,20 +73,23 @@ class HelloGithubStrategy(BaseStrategy):
             items = cat.get("items", [])
             if not items:
                 continue
-            lines.append(f'<h2>{cat_name}</h2>')
+            lines.append(f'<h2>{html.escape(cat_name)}</h2>')
             for item in items:
                 name = item.get("name", "")
                 full_name = item.get("full_name", "")
                 desc = item.get("description", "") or item.get("description_en", "")
                 github_url = item.get("github_url", "")
                 stars = item.get("stars", 0)
-                image_url = item.get("image_url", "")
+                image_url = cls._image_url(item)
 
-                lines.append(f'<h3>{name}（{full_name}）</h3>')
+                lines.append(f'<h3>{html.escape(name)}（{html.escape(full_name)}）</h3>')
                 if image_url:
-                    lines.append(f'<img src="{image_url}" alt="{name}"/>')
+                    lines.append(f'<img src="{html.escape(image_url, quote=True)}" alt="{html.escape(name, quote=True)}"/>')
                 lines.append(f'<p>{desc}</p>')
-                lines.append(f'<p>GitHub: <a href="{github_url}">{github_url}</a> | Star: {stars}</p>')
+                lines.append(
+                    f'<p>GitHub: <a href="{html.escape(github_url, quote=True)}">{html.escape(github_url)}</a>'
+                    f' | Star: {stars}</p>'
+                )
                 lines.append("<hr/>")
 
         return "\n".join(lines)

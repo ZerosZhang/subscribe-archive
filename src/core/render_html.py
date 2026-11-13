@@ -170,7 +170,8 @@ def format_datetime(dt_str):
 
 
 def extract_title(html_text):
-    m = re.search(r"<title>(.*?)</title>", html_text, re.IGNORECASE | re.DOTALL)
+    # <title> 可能带属性（HelloGitHub 的 Next.js 页面是 <title data-next-head="">）
+    m = re.search(r"<title[^>]*>(.*?)</title>", html_text, re.IGNORECASE | re.DOTALL)
     if m:
         title = m.group(1).strip()
         if " - " in title:
@@ -325,11 +326,21 @@ def _get_referer_for_url(image_url):
     return None
 
 
+_IMAGE_TIMEOUT = 45
+_IMAGE_RETRIES = 4
+# 并发太高会触发 CDN 的 TLS 握手限流（实测 20 并发大量超时）
+IMAGE_WORKERS = 6
+
+
 def _download_image(args):
-    """下载单张图片的辅助函数，带重试"""
+    """下载单张图片的辅助函数，带重试
+
+    图片 CDN（如 img.hellogithub.com）在高并发下容易 TLS 握手超时，
+    因此超时放宽到 45 秒、最多试 4 次并按 1s/2s/3s 退避。
+    """
     orig_url, full_url = args
     last_error = None
-    for attempt in range(3):
+    for attempt in range(_IMAGE_RETRIES):
         try:
             headers = {
                 "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
@@ -338,7 +349,7 @@ def _download_image(args):
             if referer:
                 headers["Referer"] = referer
             req = Request(full_url, headers=headers)
-            with urlopen(req, timeout=10) as response:
+            with urlopen(req, timeout=_IMAGE_TIMEOUT) as response:
                 data = response.read()
 
                 # 优先从 URL 获取扩展名，否则从 Content-Type 猜测
@@ -352,9 +363,9 @@ def _download_image(args):
                 return (orig_url, data, ext, None)
         except Exception as e:
             last_error = str(e)
-            if attempt < 2:
+            if attempt < _IMAGE_RETRIES - 1:
                 import time
-                time.sleep(1)
+                time.sleep(attempt + 1)
     return (orig_url, None, None, last_error)
 
 
@@ -463,14 +474,21 @@ def localize_images(html_text, base_url, assets_dir, date_prefix=None):
         return html_text
 
     full_to_name = {}
-    with ThreadPoolExecutor(max_workers=20) as executor:
+    failed = []
+    with ThreadPoolExecutor(max_workers=IMAGE_WORKERS) as executor:
         futures = [executor.submit(_download_image, (full, full)) for full in fulls]
         for future in as_completed(futures):
-            orig, data, ext, _error = future.result()
+            orig, data, ext, error = future.result()
             if data is not None:
                 name = _asset_name(date_prefix, orig, ext)
                 (assets_dir / name).write_bytes(data)
                 full_to_name[orig] = name
+            else:
+                failed.append((orig, error))
+    if failed:
+        print(f"⚠️ 图片下载失败 {len(failed)}/{len(fulls)} 张")
+        for url, error in failed[:5]:
+            print(f"   · {url}（{error}）")
 
     downloaded = {
         orig: full_to_name[full]
@@ -710,16 +728,23 @@ def scan_and_convert(day_folder=None):
         print(flush=True)
         print(f"正在批量下载 {len(full_urls)} 张图片...", flush=True)
 
-        with ThreadPoolExecutor(max_workers=30) as executor:
+        with ThreadPoolExecutor(max_workers=IMAGE_WORKERS) as executor:
             futures = [executor.submit(_download_image, (full, full)) for full in full_urls]
+            failed = []
             for future in as_completed(futures):
-                orig, data, ext, _error = future.result()
+                orig, data, ext, error = future.result()
                 if data is not None:
                     name_file = _asset_name(date_prefix, orig, ext)
                     (assets_dir / name_file).write_bytes(data)
                     full_to_name[orig] = name_file
+                else:
+                    failed.append((orig, error))
 
         print(f"✓ 图片下载完成: {len(full_to_name)}/{len(full_urls)}", flush=True)
+        if failed:
+            print(f"⚠️ 仍有 {len(failed)} 张图片下载失败", flush=True)
+            for url, error in failed[:5]:
+                print(f"   · {url}（{error}）", flush=True)
         print(flush=True)
     else:
         # 没有图片时不必保留空 assets 目录
