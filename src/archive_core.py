@@ -270,7 +270,7 @@ def _write_index_page(today, index_path, entries):
     # 热榜（archive=false 的订阅）：接着正文分组继续编号，只列标题和原文链接
     try:
         from watch_export import list_trend_entries
-        trend_feeds = list_trend_entries(limit=5, date=today)
+        trend_feeds = list_trend_entries(date=today)
     except Exception as exc:  # noqa: BLE001 - 热榜失败不影响索引页
         print(f"⚠️  热榜条目读取失败：{exc}")
         trend_feeds = []

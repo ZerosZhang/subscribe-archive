@@ -498,11 +498,15 @@ def validate_feeds():
     return results
 
 
-def list_trend_entries(limit=30, date=None):
+def list_trend_entries(limit=None, date=None):
     """列出「仅链接」订阅（archive=false）的条目
 
     date 传入 "YYYY年MM月DD日" 时只取该日抓到的条目；该日没有则回退为最新若干条。
+    limit 为 None 时返回全部条目。
     """
+    limit_sql = "" if limit is None else "LIMIT ?"
+    limit_args = () if limit is None else (limit,)
+
     conn = _connect()
     try:
         result = []
@@ -515,23 +519,23 @@ def list_trend_entries(limit=30, date=None):
                 # first_seen 形如 "2026-11-13 08:00:00"
                 prefix = (date.replace("年", "-").replace("月", "-").replace("日", "")) + "%"
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT title, link, published FROM entries
                     WHERE feed_url = ? AND first_seen LIKE ?
                     ORDER BY published DESC, id DESC
-                    LIMIT ?
+                    {limit_sql}
                     """,
-                    (url, prefix, limit),
+                    (url, prefix, *limit_args),
                 ).fetchall()
             if not rows:
                 rows = conn.execute(
-                    """
+                    f"""
                     SELECT title, link, published FROM entries
                     WHERE feed_url = ?
                     ORDER BY published DESC, id DESC
-                    LIMIT ?
+                    {limit_sql}
                     """,
-                    (url, limit),
+                    (url, *limit_args),
                 ).fetchall()
             result.append({
                 "name": feed.get("name") or url,
