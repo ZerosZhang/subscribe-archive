@@ -498,10 +498,11 @@ def validate_feeds():
     return results
 
 
-def list_trend_entries(limit=None, date=None):
+def list_trend_entries(limit=None, date=None, fallback_limit=30):
     """列出「仅链接」订阅（archive=false）的条目
 
-    date 传入 "YYYY年MM月DD日" 时只取该日抓到的条目；该日没有则回退为最新若干条。
+    date 传入 "YYYY年MM月DD日" 时只取该日抓到的条目；该日没有则回退为最近
+    fallback_limit 条，并把该组标记 fallback=True（索引页据此提示不是当日条目）。
     limit 为 None 时返回全部条目。
     """
     limit_sql = "" if limit is None else "LIMIT ?"
@@ -527,19 +528,25 @@ def list_trend_entries(limit=None, date=None):
                     """,
                     (url, prefix, *limit_args),
                 ).fetchall()
+            fallback = False
             if not rows:
+                # 当天没抓到：回退为最近的几条，绝不能把全部历史都倒进索引页
+                fallback = bool(date)
+                fallback_sql = limit_sql or "LIMIT ?"
+                fallback_args = limit_args or (fallback_limit,)
                 rows = conn.execute(
                     f"""
                     SELECT title, link, published FROM entries
                     WHERE feed_url = ?
                     ORDER BY published DESC, id DESC
-                    {limit_sql}
+                    {fallback_sql}
                     """,
-                    (url, *limit_args),
+                    (url, *fallback_args),
                 ).fetchall()
             result.append({
                 "name": feed.get("name") or url,
                 "url": url,
+                "fallback": fallback,
                 "entries": [{"title": row["title"], "link": row["link"],
                              "published": row["published"]} for row in rows],
             })

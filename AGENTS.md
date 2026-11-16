@@ -12,6 +12,12 @@
 只有用户明确说「发布」时才部署；一次改动里用户没提发布，就只交付本地改动并说明尚未发布。
 发布指：传文件到 `D:\FoloArchive`、重启服务器上的 `gui.py` / 服务进程、验证线上页面。
 
+**部署后必须重启常驻进程（重要）**：Python 只在启动时导入模块，`gui.py` / `webui.py` / `scheduler.py`
+这类常驻进程传完新文件后不会自动用上新代码，定时任务会一直按旧逻辑跑，看起来像「修了但没生效」。
+发布流程固定为「scp 传文件 → 结束旧的 python(w).exe → 重新启动 → 验证页面」。
+网页版会自己检查这件事：进程启动后若有 `src/**/*.py` 被改动，启动归档时日志会打印
+`⚠️ 源码在服务启动后被改动过…当前进程仍运行旧代码`，首页定时说明那行也会变红。
+
 本项目**在远程 Windows Server 上部署和测试**，不在本机运行。服务器地址、账号、SSH 别名、系统版本等全部以这份文档为准，不要凭记忆填写：
 
 ```
@@ -83,6 +89,10 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
 # 指定日期
 .venv/Scripts/python.exe src/archive.py --date "2026年07月07日"
 
+# 只重建索引页（不联网、不调 AI）：用已有列表 JSON 与成品 HTML 重新生成
+.venv/Scripts/python.exe src/archive.py --reindex "2026年11月14日,2026年11月15日"
+.venv/Scripts/python.exe src/archive.py --reindex        # result/ 下所有日期目录
+
 # 列出所有步骤
 .venv/Scripts/python.exe src/archive.py --list-steps
 
@@ -140,6 +150,9 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - 网页版界面（webui.py）传 `log=LOG.append`，并注入进度与停止回调
 - 返回值 dict 含 `article_list`/`download`/`conversion`/`summary_result`/`step_times`/`error`/`failures`；`failures` 为字符串列表，**只汇总系统性/流程级失败**（步骤 1 抓取或列表加载失败、流程 error、索引页写入失败）供失败邮件判定；步骤 2/3/4 的逐条内容失败只进日志与索引页标注，**不再发邮件**
 - 修改流程逻辑只需改 `archive_core.py`，两入口同步生效
+- `reindex_dates(dates, log)`：**只重建索引页**，不联网、不调 AI。用 `temp_data/「日期」.json` 作条目来源、
+  用成品 HTML 里已有的 `data-folo="summary"` 文本作摘要；没有摘要的条目按「摘要失败」标注，没有列表
+  JSON 时回退为按成品文件生成。CLI 入口 `archive.py --reindex`，用于补正被旧代码生成错的索引页
 
 ## 核心脚本行为要点
 
@@ -167,6 +180,12 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - **HTML 与 CSS 分离**：`render_document()` 只输出内容 + `<link rel="stylesheet" href="../style.css">`（`STYLE_HREF`），没有内联 `<style>`；`BASE_CSS` 由 `write_style_sheet(page_dir)` 落到 `page_dir` 的**上一级**（数据根目录 `result/style.css`，内容一致时跳过写入、不动 mtime）。所有日期、所有页面共用这一份，改一处全体生效；代价是单独拷一个日期目录到 NAS 会掉样式（要连 `result/style.css` 一起带）
 - 新增来源：在 `src/strategies/` 新建文件 + `__init__.py` 按顺序导入
 - `resolve_strategy_for_feed(url, name)`：配置页用的近似判断（拿不到文章 HTML），先按名称提示、再按 `strategy_domains()` 从 `detect()` 源码里提取的域名匹配；`strategy_domains()` 只服务展示，不参与真实转换
+
+### core/watch_export.py
+- `list_trend_entries(limit=None, date=None, fallback_limit=30)`：索引页取「仅链接」订阅（`archive=false`）条目。
+  `date` 命中当天 `first_seen` 的条目；**当天没抓到就回退为最近 `fallback_limit` 条并置 `fallback=True`**，
+  索引页把标题写成「当日未抓到，以下为最近 N 条」。`limit=None` 表示不限条数（索引页就是这么调的，
+  只要该日抓了 50 条就列 50 条），回退查询永远带上限，避免某天抓取失败时把全部历史都倒进索引页
 
 ### core/summarize.py
 - `process_article(client, model, html_file, date, force=False)` **默认断点续跑**：先看 `data-folo="summary"` 区块里有没有非空文本，有就直接复用、不调 API（返回带 `skipped=True`）；`force=True` 才重新生成。已有摘要时 `write_summary_to_html` 先清旧内容再写；失败仍返回 `success=False` 与错误原因
@@ -199,7 +218,7 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - `sys.stdout`/`sys.stderr` 重定向到线程安全的 `LogBuffer`（`deque(maxlen=2000)`，支持增量拉取），底层模块的 `print()` 也能进页面日志
 - 归档在后台线程跑，同一时间只允许一次；停止经 `should_stop` 在步骤边界生效
 - **内建每日定时**（默认开启，`--no-schedule` 关闭）：启动时抢占命名互斥量 `SubscribeArchiveScheduler`，拿到就起 daemon 调度线程、并长期持有句柄；拿不到（外部 `scheduler.py` 在跑）只记日志、不重复调度。调度线程每 20 秒检查一次，满足 `enabled` + 到点 + 当天未跑 + 当天 `result/temp_data/「日期」.json` 不存在才触发；**进程启动时若已过当天的定时点，不补跑**（记 `_SCHED_LAST_RUN_DATE` 跳过，等明天），触发直接调 `start_run([1,2,3,4], 今天)`，成功才记 `_SCHED_LAST_RUN_DATE`
-- `/api/schedule` 返回 `{owner, running, enabled, time, note}`；`owner` 为 `webui`/`external`/`disabled`，页面据此在标题下显示一行说明（如「常驻定时：每天 08:00 自动归档（由本进程负责）」）
+- `/api/schedule` 返回 `{owner, running, enabled, time, note, stale_sources}`；`owner` 为 `webui`/`external`/`disabled`，页面据此在标题下显示一行说明（如「常驻定时：每天 08:00 自动归档（由本进程负责）」）。`stale_sources` 是**本进程启动后又被改动的源文件**（`src/**/*.py`），非空时首页那行说明变红提示「源码已更新但服务未重启」，`start_run()` 也会往日志写同样的警告——Python 常驻进程不会自动热加载代码，传完文件不重启就是一直在跑旧逻辑
 - **归档日历（月视图）**：`GET /api/heatmap` 用 `heatmap.scan_daily_counts`（纯标准库模块）合并 `result/` 与 `result/归档/` 的篇数，叠加按天已读状态，返回 `{days:{日期:{"count","read"}}, total, recent30, read_days}`；前端渲染成月历（周一~周日七列，日号 + 篇数），三态上色（灰=无归档、绿=未读、蓝=已读），今天描边、未来日期淡化，「‹ 月份 ›」切换与「今天」跳转；单击在新标签页打开当天总览并标记已读，Shift/Alt+单击只切换已读
 - **手动执行不再选日期**：页面只提交 `steps`，`start_run()` 的 `date_str` 省略时取当天；CLI 的 `--date` 仍可用
 - **已读状态**：按天存 `result/read_state.json`（`{"YYYY年MM月DD日": true}`），`load_read_state()` 容错（缺失/损坏视为全部未读），`set_read_state()` 在锁内原子写入（临时文件 + `os.replace`）；接口 `POST /api/read` body `{"date","read"}` → `{ok, error}`

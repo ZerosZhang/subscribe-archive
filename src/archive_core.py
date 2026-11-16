@@ -278,9 +278,12 @@ def _write_index_page(today, index_path, entries):
     next_index = len(sorted_sources)
     for feed in trend_feeds:
         num = chinese_nums[next_index] if next_index < len(chinese_nums) else str(next_index + 1)
+        suffix = "仅链接"
+        if feed.get("fallback"):
+            suffix = f"当日未抓到，以下为最近 {len(feed['entries'])} 条"
         parts.append(
             f'<h2 class="index-source">{num}、{html_escape(feed["name"])}'
-            f'（{len(feed["entries"])} 条 · 仅链接）</h2>'
+            f'（{len(feed["entries"])} 条 · {suffix}）</h2>'
         )
         parts.append('<ul class="index-list">')
         for item in feed["entries"]:
@@ -406,6 +409,51 @@ def _summarize_step(today, log, article_list=None, missing_notes=None, should_st
     return {"processed": processed, "skipped": skipped, "failed": len(failures),
             "failures": failures, "path": index_path, "entries": len(entries),
             "index_error": index_error}
+
+
+def reindex_dates(dates, log):
+    """只重建索引页：不联网、不调 AI，用已有文章列表 JSON 与成品 HTML 重新生成
+
+    用于「索引页被旧代码或旧逻辑生成错了，事后补正」的场景——正常归档仍走
+    run_archive。返回 [{"date","path","entries","error"}]
+    """
+    from summarize import read_existing_summary, scan_html_files
+
+    results = []
+    for today in dates:
+        folder = OUTPUT_BASE_DIR / today
+        if not folder.exists():
+            log(f"✗ {today}：目录不存在 {folder}")
+            results.append({"date": today, "path": None, "entries": 0, "error": "目录不存在"})
+            continue
+
+        article_list = _load_article_list(today)
+        html_files = scan_html_files(folder, today)
+        summary_by_file = {}
+        for html_file in html_files:
+            text = read_existing_summary(html_file)
+            if text:
+                summary_by_file[html_file.name] = {"summary": text}
+
+        if article_list:
+            entries = _build_index_entries(today, article_list, summary_by_file, {}, {})
+        else:
+            log(f"⚠️  {today}：没有文章列表 JSON，索引页按成品文件生成")
+            entries = _build_entries_from_files(html_files, summary_by_file, {})
+
+        index_path = folder / f"{today}.html"
+        try:
+            _write_index_page(today, index_path, entries)
+        except Exception as exc:  # noqa: BLE001 - 单日失败不影响其他日期
+            error = f"{type(exc).__name__}: {exc}"
+            log(f"✗ {today}：索引页生成失败 — {error}")
+            results.append({"date": today, "path": None, "entries": 0, "error": error})
+            continue
+
+        log(f"✓ {today}：索引页 {len(entries)} 条 → {index_path}")
+        results.append({"date": today, "path": index_path, "entries": len(entries),
+                        "error": None})
+    return results
 
 
 def run_archive(selected_steps, today, log, on_progress=None, should_stop=None):

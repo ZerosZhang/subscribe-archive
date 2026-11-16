@@ -9,9 +9,11 @@
     python archive.py --start-step 4 # 从第 4 步开始（跳过 1-3）
     python archive.py --only-step 4  # 只执行第 4 步
     python archive.py --list-steps   # 列出所有步骤
+    python archive.py --reindex "2026年11月14日,2026年11月15日"  # 只重建索引页（不联网、不调 AI）
 """
 
 import argparse
+import re
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -22,10 +24,23 @@ sys.path.insert(0, str(Path(__file__).parent))
 sys.path.insert(0, str(Path(__file__).parent / "core"))
 
 # Windows 终端编码修复（必须在导入其他模块之前执行）
-from utils import fix_encoding
+from utils import fix_encoding, OUTPUT_BASE_DIR
 fix_encoding()
 
-from archive_core import STEPS, run_archive
+from archive_core import STEPS, reindex_dates, run_archive
+
+_DATE_RE = re.compile(r"^\d{4}年\d{2}月\d{2}日$")
+
+
+def _is_date(text):
+    """校验 YYYY年MM月DD日 形式的日期，含真实日期检查"""
+    if not _DATE_RE.match(text or ""):
+        return False
+    try:
+        datetime.strptime(text, "%Y年%m月%d日")
+    except ValueError:
+        return False
+    return True
 
 
 def parse_args():
@@ -47,6 +62,9 @@ def parse_args():
                         help="列出所有步骤及编号")
     parser.add_argument("--date", type=str, metavar="YYYY年MM月DD日",
                         help="指定日期（默认为今天）")
+    parser.add_argument("--reindex", nargs="?", const="", metavar="日期1,日期2",
+                        help="只重建索引页（不联网、不调 AI）：可给逗号分隔的日期，"
+                             "省略日期则重建 result/ 下所有日期")
     return parser.parse_args()
 
 
@@ -93,6 +111,28 @@ def main():
 
     # 确定日期
     today = args.date or datetime.now().strftime("%Y年%m月%d日")
+
+    # 只重建索引页（补正被旧代码生成错的索引）
+    if args.reindex is not None:
+        if args.reindex.strip():
+            dates = [item.strip() for item in args.reindex.split(",") if item.strip()]
+            invalid = [item for item in dates if not _is_date(item)]
+            if invalid:
+                print(f"❌ 日期格式无效: {', '.join(invalid)}（应为 YYYY年MM月DD日）")
+                sys.exit(1)
+        else:
+            dates = sorted(path.name for path in OUTPUT_BASE_DIR.iterdir()
+                           if path.is_dir() and _is_date(path.name))
+        if not dates:
+            print("❌ 没有可重建的日期")
+            sys.exit(1)
+        results = reindex_dates(dates, log=lambda message: print(message, flush=True))
+        failed = [item for item in results if item["error"]]
+        print(f"\n共 {len(results)} 天，成功 {len(results) - len(failed)} 天"
+              + (f"，失败 {len(failed)} 天" if failed else ""))
+        if failed:
+            sys.exit(1)
+        return
 
     # 确定要执行的步骤范围
     if args.only_step is not None and args.start_step is not None:

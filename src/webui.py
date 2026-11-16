@@ -60,6 +60,35 @@ LOG_MAX_LINES = 2000
 HEATMAP_TTL = 5.0
 SCHEDULE_TTL = 10.0
 
+# 本进程加载代码的时刻：之后被改动的源文件不会被当前进程加载（部署后必须重启）
+PROCESS_STARTED_TS = time.time()
+
+
+def stale_sources():
+    """返回本进程启动后被改动过的源文件（相对 src/ 的路径）
+
+    常驻进程只在启动时导入模块，之后改磁盘上的 .py 不会生效，定时任务会一直
+    跑旧代码。这里把这种状态显式暴露出来，避免「修了但没生效」再被忽略。
+    """
+    stale = []
+    for path in sorted(SCRIPT_DIR.rglob("*.py")):
+        try:
+            if path.stat().st_mtime > PROCESS_STARTED_TS:
+                stale.append(path.relative_to(SCRIPT_DIR).as_posix())
+        except OSError:
+            continue
+    return stale
+
+
+def stale_notice():
+    """代码过期提示文本；没有过期源码时返回空串"""
+    stale = stale_sources()
+    if not stale:
+        return ""
+    more = " 等" if len(stale) > 3 else ""
+    return ("⚠️ 源码在服务启动后被改动过（" + "、".join(stale[:3]) + more +
+            "），当前进程仍运行旧代码，这些改动不会生效；请「退出服务」后重新启动")
+
 
 # =============================================================================
 # 日志缓冲区（线程安全、有上限）
@@ -369,6 +398,9 @@ def start_run(steps, date_str=None):
         _STATE["step_times"] = {}
 
     LOG.append(f"[WebUI] 开始执行：步骤 {steps}，日期 {date_str}")
+    notice = stale_notice()
+    if notice:
+        LOG.append(notice)
     threading.Thread(target=_run_worker, args=(steps, date_str), daemon=True).start()
     return True, None
 
@@ -721,6 +753,7 @@ def get_schedule(force=False):
         "enabled": enabled,
         "time": at,
         "note": _SCHEDULE_NOTES.get(owner, _SCHEDULE_NOTES["disabled"]),
+        "stale_sources": stale_sources(),
     }
 
     with _SCHED_LOCK:
@@ -1020,6 +1053,8 @@ def start_service(host=None, port=None, schedule=True, mirror=None):
     url = _display_url(host, port)
     LOG.append("=" * 60)
     LOG.append(f"订阅归档网页版已启动：{url}")
+    LOG.append(f"代码加载时间：{datetime.fromtimestamp(PROCESS_STARTED_TS):%Y-%m-%d %H:%M:%S}"
+               "（此后的源码改动需重启服务才生效）")
     LOG.append("=" * 60)
 
     if schedule:

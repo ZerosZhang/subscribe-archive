@@ -266,6 +266,18 @@ def _existing_summary_text(html_content):
     return html.unescape(inner).strip()
 
 
+def read_existing_summary(html_file):
+    """读取成品 HTML 里已有的摘要文本（不调 API）；读不到返回空串
+
+    供只重建索引页的场景复用（archive_core.reindex_dates）。
+    """
+    try:
+        content = html_file.read_text(encoding="utf-8")
+    except OSError:
+        return ""
+    return _existing_summary_text(content)
+
+
 def process_article(client, model, html_file, date, force=False):
     """处理单篇文章：AI 摘要 → 注入 HTML 摘要区块
 

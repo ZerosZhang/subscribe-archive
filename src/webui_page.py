@@ -378,7 +378,14 @@ input[type=text]{font-family:inherit;font-size:14px;padding:7px 10px;border:1px 
     s = s || {};
     var owner = s.owner || (s.running ? "external" : "disabled");
     var text = SCHED_LINES[owner] || SCHED_LINES.disabled;
-    el("sched-line").textContent = text.replace("{time}", s.time || "08:00");
+    var stale = s.stale_sources || [];
+    if(stale.length){
+      text += " · ⚠️ 源码已更新但服务未重启（" + stale.slice(0, 3).join("、") +
+              (stale.length > 3 ? " 等 " + stale.length + " 个文件" : "") + "），改动不会生效";
+    }
+    var node = el("sched-line");
+    node.textContent = text.replace("{time}", s.time || "08:00");
+    node.className = "sched-line" + (stale.length ? " err-line" : "");
   }
   function refreshSchedule(force){
     fetch("/api/schedule" + (force ? "?refresh=1" : ""))
