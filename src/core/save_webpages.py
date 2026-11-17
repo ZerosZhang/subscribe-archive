@@ -18,6 +18,7 @@ import time
 import urllib.request
 
 from utils import TEMP_DIR
+import waf
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlparse, quote
@@ -138,10 +139,18 @@ def fetch_url(url, timeout=30, retries=1):
             with opener.open(req, timeout=timeout) as response:
                 # 尝试读取并处理编码
                 html_bytes = response.read()
+                content_type = response.headers.get('Content-Type', '')
+
+            # openresty WAF 的 JS 挑战页（几百字节的 _hgk 跳转）：换到通行 Cookie
+            # 后重取一次，见 waf.py
+            if waf.is_challenge(html_bytes):
+                html_bytes = waf.fetch(
+                    encoded_url, headers, timeout=timeout,
+                    use_proxy=not any(
+                        site in domain.lower() for site in _NO_PROXY_SITES))
 
             # 尝试从 Content-Type 或 meta 标签推断编码
             charset = None
-            content_type = response.headers.get('Content-Type', '')
             if 'charset=' in content_type:
                 charset = content_type.split('charset=')[-1].split(';')[0].strip().lower()
 

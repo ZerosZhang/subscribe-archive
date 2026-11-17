@@ -65,6 +65,7 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
     │   ├── utils.py             # 公共工具 + 路径常量（唯一事实来源）
     │   ├── watch_export.py      # 抓取 RSS/Atom 或站点列表页，判断更新（见 doc/watch_export.md）
     │   ├── save_webpages.py     # 下载原始 HTML 到 temp_data/raw/
+    │   ├── waf.py               # openresty WAF 的 JS 挑战（换通行 Cookie，见 doc/waf.md）
     │   ├── render_html.py       # 原始 HTML → 干净 HTML（策略模式 + 图片本地化）
     │   ├── summarize.py         # AI 生成摘要并注入 HTML
     │   └── notify.py            # 失败邮件通知（见 doc/notify.md）
@@ -170,6 +171,14 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - 下载失败记录到 `failed_urls` 并返回干净原因（无 HTML 注释/换行），不中断流程
 - `download_articles(..., overwrite=False)` 默认不覆盖已存在文件，CLI 用 `--overwrite` 强制覆盖；**归档管线（`archive_core._download_step`）固定传 `overwrite=True`**
 - `_NO_PROXY_SITES`（如 `meta.appinn.net`）绕过系统代理直连；`_PLAIN_UA_SITES`（如 `mobius.blog`）改用普通客户端 UA
+- 读到 openresty WAF 的 JS 挑战页（几百字节 + `_hgk` token）时交给 `waf.fetch()` 换通行 Cookie 后重取，见 `doc/waf.md`
+
+### core/waf.py
+- 破解 openresty WAF 的 JS 挑战：挑战页里只有一段 `location.replace("/路径?_hgk=<token>")`，带 token 与 **Referer** 再请求一次即得 `hg_pass` Cookie（HttpOnly/Secure，2 小时），之后正常访问；静态资源不受影响
+- 接口 `is_challenge(body)` / `fetch(url, headers=None, timeout=25, use_proxy=True)`；Cookie 存在模块级 `CookieJar`，同一次归档里只有第一篇文章需要过挑战
+- 判断只看响应体（体积上限 + token 正则），不维护站点清单；页面正常时只多一次判断、不发额外请求
+- 换 token 的那次请求不跟随 302（`_StopRedirect`），避免白下正文；最多 2 轮，服务端持续发挑战页时不死循环
+- 接入点是 `save_webpages.fetch_url` 与 `watch_export.fetch_feed` / `fetch_html`；模块级 jar 非线程安全，调用方都是串行下载
 
 ### core/render_html.py
 - 策略模式：策略位于 `src/strategies/` 包，`@register_strategy` 装饰器注册
@@ -179,9 +188,11 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - 清洗正文（剥离 `<script>/<style>/<iframe>`、`on*` 属性、`javascript:` 链接），套响应式模板，并把 `<img src>`（含懒加载属性）本地化到同级 `assets/`
 - **HTML 与 CSS 分离**：`render_document()` 只输出内容 + `<link rel="stylesheet" href="../style.css">`（`STYLE_HREF`），没有内联 `<style>`；`BASE_CSS` 由 `write_style_sheet(page_dir)` 落到 `page_dir` 的**上一级**（数据根目录 `result/style.css`，内容一致时跳过写入、不动 mtime）。所有日期、所有页面共用这一份，改一处全体生效；代价是单独拷一个日期目录到 NAS 会掉样式（要连 `result/style.css` 一起带）
 - 新增来源：在 `src/strategies/` 新建文件 + `__init__.py` 按顺序导入
+- 标题尾部由主题追加的站点名由策略自己声明：`title_suffixes` + 基类 `clean_title()`（先 `html.unescape`，再把「分隔符 + 站点名」从末尾删掉，循环到稳定）；`convert_file` 用它清理页面标题，步骤 1 的 `check_feed` 也用它清理入库标题，保持文件名/索引/页面三处一致
 - `resolve_strategy_for_feed(url, name)`：配置页用的近似判断（拿不到文章 HTML），先按名称提示、再按 `strategy_domains()` 从 `detect()` 源码里提取的域名匹配；`strategy_domains()` 只服务展示，不参与真实转换
 
 ### core/watch_export.py
+- 有专用策略的源（`resolve_strategy_for_feed()` 命中）入库前用策略的 `clean_title()` 去掉标题尾部站点名
 - `list_trend_entries(limit=None, date=None, fallback_limit=30)`：索引页取「仅链接」订阅（`archive=false`）条目。
   `date` 命中当天 `first_seen` 的条目；**当天没抓到就回退为最近 `fallback_limit` 条并置 `fallback=True`**，
   索引页把标题写成「当日未抓到，以下为最近 N 条」。`limit=None` 表示不限条数（索引页就是这么调的，

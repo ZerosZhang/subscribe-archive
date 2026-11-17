@@ -36,7 +36,7 @@
 
 ## 渲染流程
 
-1. **提取元信息**：标题 / 原文链接（`og:url`、`canonical`）/ 来源（文件名提示 + `result/temp_data/「日期」.json` 匹配 feed_title、发布时间）
+1. **提取元信息**：标题 / 原文链接（`og:url`、`canonical`）/ 来源（文件名提示 + `result/temp_data/「日期」.json` 匹配 feed_title、发布时间）。标题随后交给策略的 `clean_title()` 去掉站点自己追加的后缀
 2. **策略识别**：`resolve_strategy(html, filename_hint)`，文件名提示优先于 JSON 的 feed_title
 3. **提取正文**：`strategy.extract_body()` + `strategy.extract_blocks()` → `[(h2标题或None, 块HTML)]`，跳过 `skip_titles`
 4. **清洗**：剥离 `<script>/<style>/<iframe>`、`on*` 事件属性、`javascript:` 链接

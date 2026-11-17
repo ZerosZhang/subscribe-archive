@@ -26,6 +26,7 @@
 - 失败原因回调为干净文本（`下载失败: HTTP 404: Not Found`），无 HTML 注释与换行
 - `_NO_PROXY_SITES` 中的域名（如 `meta.appinn.net`）绕过系统代理直连——部分代理节点与其 TLS 握手会报 `SSL: UNEXPECTED_EOF_WHILE_READING`
 - `_PLAIN_UA_SITES` 中的域名（如 `mobius.blog`）改用普通客户端 UA，避免被 WAF 误判为伪装浏览器
+- 遇到 openresty WAF 的 JS 挑战页（如 `www.freedidi.com`）自动换通行 Cookie 后重取，见 `doc/waf.md`；判断条件只看响应体，无需维护站点清单
 - `optimize_titles()` 规范化目录内文件名（统一 `「来源」标题` 格式），跳过当天索引页
 
 ## 图片防盗链

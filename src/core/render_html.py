@@ -593,6 +593,9 @@ def convert_file(html_path, output_path=None, download_img=True):
     if not strategy:
         return None, None, False, "", ""
 
+    # 去掉主题追加在标题尾部的站点名（各来源在自己的策略里声明）
+    title = strategy.clean_title(title)
+
     # 兜底元信息
     if not meta:
         meta = {

@@ -26,7 +26,10 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from utils import PYTHON_ROOT, TEMP_DIR  # noqa: E402
 
+import waf  # noqa: E402
+
 from watchers import resolve_watcher  # noqa: E402
+from strategies import resolve_strategy_for_feed  # noqa: E402
 
 WATCH_FEEDS_PATH = PYTHON_ROOT / "src" / "watch_feeds.json"
 WATCH_DB_PATH = TEMP_DIR / "watch.db"
@@ -85,7 +88,12 @@ def fetch_html(url):
     with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
         raw = resp.read()
         charset = resp.headers.get_content_charset() or "utf-8"
-        return raw.decode(charset, errors="ignore"), resp.geturl()
+        final_url = resp.geturl()
+    if waf.is_challenge(raw):
+        raw = waf.fetch(url, {"User-Agent": UA,
+                              "Accept": "text/html,application/xhtml+xml,*/*"},
+                        timeout=TIMEOUT)
+    return raw.decode(charset, errors="ignore"), final_url
 
 
 def _is_feed(url):
@@ -207,8 +215,18 @@ def fetch_feed(url, etag, modified):
     for attempt in range(2):  # 网络抖动（SSL EOF / 超时）重试一次
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
-                return ("ok", resp.read(),
-                        resp.headers.get("ETag"), resp.headers.get("Last-Modified"))
+                body = resp.read()
+                etag_value = resp.headers.get("ETag")
+                modified_value = resp.headers.get("Last-Modified")
+            # openresty WAF 的 JS 挑战页：换通行 Cookie 后重取（见 waf.py）
+            if waf.is_challenge(body):
+                body = waf.fetch(
+                    url,
+                    {"User-Agent": UA,
+                     "Accept": "application/rss+xml, application/atom+xml, "
+                               "application/xml, text/xml, */*"},
+                    timeout=TIMEOUT)
+            return "ok", body, etag_value, modified_value
         except urllib.error.HTTPError as exc:
             if exc.code == 304:
                 return "not_modified", None, None, None
@@ -286,6 +304,12 @@ def check_feed(conn, feed):
     etag = row["etag"] if row else None
     modified = row["modified"] if row else None
 
+    # 有专用策略的源，标题尾巴上的站点名由策略负责去掉（与渲染时同一套规则）
+    strategy = resolve_strategy_for_feed(url, name)
+
+    def clean_title(text):
+        return strategy.clean_title(text) if strategy else (text or "")
+
     watcher = resolve_watcher(url)
     if watcher is not None:
         new_etag = new_modified = None
@@ -334,14 +358,14 @@ def check_feed(conn, feed):
         if cursor.rowcount and not first_run:
             if not do_archive:
                 articles.append({"no_archive": True, **{
-                    "title": item["title"] or "无标题",
+                    "title": clean_title(item["title"]) or "无标题",
                     "published": item["published"],
                     "url": item["link"],
                 }})
                 continue
             articles.append({
                 "entry_id": item["guid"],
-                "title": item["title"] or "无标题",
+                "title": clean_title(item["title"]) or "无标题",
                 "url": item["link"],
                 "feed_title": name,
                 "published": item["published"],

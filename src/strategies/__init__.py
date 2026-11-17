@@ -28,3 +28,4 @@ from . import mobius
 from . import wang_zhiyong
 from . import ezindie
 from . import yu_gao
+from . import freedidi

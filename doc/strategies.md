@@ -2,7 +2,7 @@
 
 ## 职责
 
-原始 HTML 的来源识别与正文提取策略（服务于干净 HTML 渲染）。每个来源一个独立模块，按注册顺序匹配（**第一个匹配生效**），当前共 **22** 个策略。
+原始 HTML 的来源识别与正文提取策略（服务于干净 HTML 渲染）。每个来源一个独立模块，按注册顺序匹配（**第一个匹配生效**），当前共 **23** 个策略。
 
 ## 结构
 
@@ -31,7 +31,8 @@ src/strategies/
 ├── mobius.py         # 莫比乌斯
 ├── wang_zhiyong.py   # 王志勇-和平海底
 ├── ezindie.py        # 独立开发变现周刊
-└── yu_gao.py         # Blog Yu Gao
+├── yu_gao.py         # Blog Yu Gao
+└── freedidi.py       # 零度博客（freedidi.com）
 ```
 
 ## base.py 核心
@@ -40,11 +41,13 @@ src/strategies/
 class BaseStrategy:
     name = "未知来源"          # 来源显示名
     skip_titles = []          # 需跳过的标题列表
+    title_suffixes = ()       # 标题尾部要去掉的站点名（clean_title 处理）
     # 需实现：
     detect(html_text, filename_hint) -> bool       # 是否匹配
     extract_body(html_text) -> str                 # 提取正文 HTML
     extract_blocks(body_html) -> [(h2标题或None, 块HTML)]  # 拆分内容块
 
+clean_title(title)                             # 去掉标题尾部的站点名 + 还原 HTML 实体
 register_strategy(cls)        # 注册装饰器
 resolve_strategy(html_text, filename_hint)         # 按注册顺序返回第一个匹配
 _find_matching_close(html, pos)                    # 匹配 </div> 闭合位置
@@ -58,6 +61,7 @@ _find_matching_close(html, pos)                    # 匹配 </div> 闭合位置
 
 ## 特殊来源
 
+- **零度博客（freedidi.com）**：WordPress + Hueman 主题，正文在 `entry-content` 内层的 `entry themeform` 里。文末挂着「打赏支持」弹窗（`donation-container`）、阅读统计 `<span data-qqqrs>`、清浮动 `div.clear` 和成片的 `<p>&nbsp;</p>` 空段，都要清掉；教程视频是 YouTube 嵌入，管线会剥掉 iframe，策略里先降级成普通链接；图片带 `srcset`，图片本地化只改 `src`，留着 `srcset` 浏览器仍会回源站取图，策略里直接删掉。站点前面还有 openresty WAF 的 JS 挑战，下载由 `core/waf.py` 处理
 - **HelloGithub**：Next.js SPA，正文从 `__NEXT_DATA__` 的 JSON 生成。条目截图的字段是 `image_path`（形如 `/i/xxx.gif`，域名 `https://img.hellogithub.com`），没有 `image_url`；用错字段会导致页面一张图片都没有
 
 ## 新增来源步骤

@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """策略基类与注册表"""
 
+import html as html_mod
+import re
+
 # 2. 策略基类与注册
 # =============================================================================
 
@@ -9,11 +12,31 @@ class BaseStrategy:
 
     name = "未知来源"
     skip_titles = []
+    # 标题尾部由主题/平台追加的站点名，clean_title() 会连同前面的分隔符一起删掉
+    title_suffixes = ()
 
     @classmethod
     def detect(cls, html_text: str, filename_hint: str = "") -> bool:
         """检测是否适用此策略。filename_hint 为文件名中的来源提示。"""
         return False
+
+    @classmethod
+    def clean_title(cls, title: str) -> str:
+        """去掉标题尾部的站点名（如「…免费部署 | 零度解说」→「…免费部署」）
+
+        标题里的 HTML 实体先还原（页面 <title> 里的 – 常写成 &#8211;），
+        否则带实体的后缀匹配不上。
+        """
+        title = html_mod.unescape(title or "").strip()
+        if not cls.title_suffixes:
+            return title
+        names = "|".join(re.escape(name) for name in cls.title_suffixes)
+        pattern = re.compile(rf"\s*[|｜\-–—:：]\s*(?:{names})\s*$")
+        stripped = None
+        while stripped != title:
+            stripped = title
+            title = pattern.sub("", title).strip()
+        return title
 
     @classmethod
     def extract_body(cls, html_text: str) -> str:

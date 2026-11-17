@@ -32,6 +32,8 @@
 - `validate_feeds()`：逐条实抓校验订阅链接（只读，不改 ETag/状态），网页版「订阅配置 → 检测链接」和 `python src/core/watch_export.py --validate` 都调用它
 - 订阅项可加 `"archive": false`：仍然检查更新，但不交给后续下载/渲染步骤；每日索引页会把它们编成「十、知乎热榜（仅链接）」这样的分组接在正文分组之后，只有标题和原文链接（`list_trend_entries(date=...)` 取当天抓到的条目，没有则回退最新若干条）
 - 首次检查某个源时**只记基线、不当作更新**，避免第一次就把历史文章全部归档
+- 遇到 openresty WAF 的 JS 挑战页（如零度博客的 `/feed`）自动换通行 Cookie 后重取，见 `doc/waf.md`
+- 有专用策略的来源（`resolve_strategy_for_feed()` 命中）会在入库前用策略的 `clean_title()` 去掉标题尾部的站点名，与渲染时同一套规则
 - `discover_feeds(url)`：从任意网址找 feed——先试地址本身，再解析网页里
   `<link rel="alternate" type="application/rss+xml|atom+xml">`，最后猜 `/feed`、`/rss` 等常见路径；
   每个候选都会实抓验证，最多返回 6 个；找不到时提示改用 RSSHub
