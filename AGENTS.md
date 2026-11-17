@@ -10,7 +10,7 @@
 
 **发布必须听指令（重要）**：改完代码先在本机调试、自测通过即可，**不要每改一版就发布到服务器**。
 只有用户明确说「发布」时才部署；一次改动里用户没提发布，就只交付本地改动并说明尚未发布。
-发布指：传文件到 `D:\FoloArchive`、重启服务器上的 `gui.py` / 服务进程、验证线上页面。
+发布指：传文件到 `D:\Archive`、重启服务器上的 `gui.py` / 服务进程、验证线上页面。
 
 **部署后必须重启常驻进程（重要）**：Python 只在启动时导入模块，`gui.py` / `webui.py` / `scheduler.py`
 这类常驻进程传完新文件后不会自动用上新代码，定时任务会一直按旧逻辑跑，看起来像「修了但没生效」。
@@ -25,7 +25,7 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
 ```
 
 - **连接方式**：`ssh srv`（已配公钥免密）；传文件用 `scp 文件 srv:C:/路径/`。远程桌面用 `mstsc /v:<服务器IP>`，最多 2 个并发会话
-- **服务器部署路径**：`D:\FoloArchive`（含 `.venv`，venv 的 `pyvenv.cfg` 指向 `C:\Program Files\Python314`）
+- **服务器部署路径**：`D:\Archive`（原 `D:\FoloArchive`，2026-11-17 改名；含 `.venv`，venv 的 `pyvenv.cfg` 指向 `C:\Program Files\Python314`）
 - **Python 基线**：`C:\Program Files\Python314\python.exe`，不在 `C:\Python314`（旧位置已废弃）
 - **GUI 启动限制**：SSH 会话里的进程落在 session 0，桌面窗口不可见。要在交互桌面启动需用 `schtasks /create ... /it` 建一次性任务再 `/run`
 - **代理**：服务器系统代理为 `127.0.0.1:7890`（mihomo），命令行工具需自行设置 `HTTP_PROXY` / `HTTPS_PROXY`
