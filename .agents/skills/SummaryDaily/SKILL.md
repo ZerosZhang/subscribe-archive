@@ -58,7 +58,46 @@
   <div class="article-meta"><span class="index-intro">本日共收录 {total} 篇文章，按来源分类整理。其中 {missing} 篇未能生成本地归档，已在页内标注并链接原文。</span></div>
 </header>
 
-<h2 class="index-source">{中文序号}、{来源名称}（{篇数} 篇）</h2>
+<div class="index-layout">
+  <div class="index-body">
+    <!-- ① 顶部订阅结果表：数据取自 result/temp_data/「{日期}」result.json -->
+    <section class="index-status">
+      <h2 class="index-section" id="feed-status">订阅结果</h2>
+      <table class="feed-table">
+        <thead><tr><th>#</th><th>订阅源</th><th>当天结果</th><th>说明</th></tr></thead>
+        <tbody>
+          <!-- 结果列：获取更新失败 / 全部失败（0/m）/ 部分成功（n/m）/ 全部成功（m）/ 无更新 / 未检查
+               单元格加 st-fail / st-partial / st-ok / st-none / st-unknown -->
+          <tr><td class="col-no">1</td><td class="col-name">{来源}</td>
+              <td class="col-status st-partial">部分成功（17/20）</td>
+              <td class="col-detail">下载失败 2 篇、摘要失败 1 篇</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <!-- ② 按来源分组的正文，每个 h2 带 id="src-N" 供目录跳转 -->
+    <h2 class="index-source" id="src-1">{中文序号}、{来源名称}（{篇数} 篇）</h2>
+    ...
+  </div>
+
+  <!-- ③ 右侧悬浮目录：position: sticky，窄屏（<900px）自动隐藏 -->
+  <aside class="index-toc">
+    <div class="toc-title">目录</div>
+    <ol>
+      <li><a href="#feed-status">订阅结果</a><span class="toc-count">{N} 个源</span></li>
+      <li><a href="#src-1">{来源名称}</a><span class="toc-count">{篇数} 篇</span></li>
+    </ol>
+  </aside>
+</div>
+```
+
+- 表格只有 `result.json` 的 `feeds` 非空时才画（老日期没有记录就不画）
+- 「仅链接」热榜源当天抓取失败时**整段跳过**，不要回退写「最近 N 条」
+- 表格与目录的数据都不许现编，必须来自 `result.json`
+
+来源分组内的条目结构（每个 `<h2 class="index-source" id="src-N">` 后跟一个 `<ul class="index-list">`）：
+
+```html
 <ul class="index-list">
   <!-- ok -->
   <li class="index-item"><a href="./{URL编码文件名}.html" target="_blank" rel="noopener noreferrer">{显示标题}</a>

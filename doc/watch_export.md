@@ -28,9 +28,14 @@
 
 - 状态库 `result/temp_data/watch.db`（SQLite），两张表：`feeds` 存 ETag/Last-Modified/失败状态，`entries` 存已见过的 guid
 - 去重键：优先 `id` → `link` → `标题+时间` 的 sha1
+- `export_articles(skip_auth_check=False, only_feed=None)`：`only_feed` 只检查一个源（名字或网址），**不覆盖当天的列表文件**——有新增条目就并入已有列表（`_merge_article_list` 按 `entry_id`/`url` 去重），没有就完全不动文件，也不改写 `last_check.json`
+- `export_articles()` 返回 `(today, article_list, output_path, failure_reason, feed_results)`：
+  `feed_results` 是**每个源的抓取状态**（`name/url/archive/status/new/entries/error`），
+  由 `check_feed()` 一并返回；`archive_core` 用它写当日结果并生成索引页表格
 - 每次 `export_articles()` 结束都会把本次检查的失败源写入 `result/temp_data/last_check.json`（`{checked_at, failures:[{name,url,error}]}`），网页版据此在首页提示
+- 抓取失败/成功都会 `conn.commit()`：失败时 `feeds.last_error`、`fail_count`、`last_check` 会当场落库（旧版本失败分支漏了提交，导致配置页的「连续 N 次」不涨）
 - `validate_feeds()`：逐条实抓校验订阅链接（只读，不改 ETag/状态），网页版「订阅配置 → 检测链接」和 `python src/core/watch_export.py --validate` 都调用它
-- 订阅项可加 `"archive": false`：仍然检查更新，但不交给后续下载/渲染步骤；每日索引页会把它们编成「十、知乎热榜（仅链接）」这样的分组接在正文分组之后，只有标题和原文链接（`list_trend_entries(date=...)` 取当天抓到的条目，没有则回退最新若干条）
+- 订阅项可加 `"archive": false`：仍然检查更新，但不交给后续下载/渲染步骤；每日索引页会把它们编成「十、知乎热榜（仅链接）」这样的分组接在正文分组之后，只有标题和原文链接（`list_trend_entries(date=...)` 取当天抓到的条目，没有则回退最新若干条）。**当天抓取失败的源，索引页直接跳过整个分组**（不再回退显示旧内容），失败原因写进顶部结果表
 - 首次检查某个源时**只记基线、不当作更新**，避免第一次就把历史文章全部归档
 - 遇到 openresty WAF 的 JS 挑战页（如零度博客的 `/feed`）自动换通行 Cookie 后重取，见 `doc/waf.md`
 - 有专用策略的来源（`resolve_strategy_for_feed()` 命中）会在入库前用策略的 `clean_title()` 去掉标题尾部的站点名，与渲染时同一套规则
@@ -51,4 +56,4 @@
 
 ## 输出
 
-`export_articles(skip_auth_check=False)` 返回 4 元组 `(today, article_list, output_path, failure_reason)`，字段结构（`entry_id`/`title`/`url`/`feed_title`/`published`/`summary`）。
+`export_articles(skip_auth_check=False, only_feed=None)` 返回 5 元组 `(today, article_list, output_path, failure_reason, feed_results)`；文章字段结构为 `entry_id`/`title`/`url`/`feed_title`/`published`/`summary`，`feed_results` 见上（每源抓取状态）。

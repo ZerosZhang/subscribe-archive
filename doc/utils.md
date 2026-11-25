@@ -12,6 +12,7 @@
 | `RESULT_DIR` | `result/` | 数据目录 |
 | `TEMP_DIR` | `result/temp_data/` | 文章列表 JSON（按日期命名） |
 | `RAW_DIR` | `result/temp_data/raw/` | 原始下载 HTML（步骤 2 → 步骤 3 的中间产物） |
+| `LOGS_DIR` | `result/logs/` | 运行日志（按日期一份，见 `doc/runlog.md`；不参与热力图统计） |
 | `CONFIG_PATH` | `src/config.json` | API / 定时 / 邮件配置 |
 | `OUTPUT_BASE_DIR` | `result/` | 成品 HTML 输出目录 |
 

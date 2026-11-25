@@ -18,8 +18,9 @@ from pathlib import Path
 # =============================================================================
 PYTHON_ROOT = Path(__file__).resolve().parent.parent.parent  # 项目根（src/core 往上三层）
 RESULT_DIR = PYTHON_ROOT / "result"
-TEMP_DIR = RESULT_DIR / "temp_data"                          # 文章列表 JSON
+TEMP_DIR = RESULT_DIR / "temp_data"                          # 文章列表 JSON + 当日结果
 RAW_DIR = TEMP_DIR / "raw"                                   # 原始下载 HTML（步骤 2 → 步骤 3 中间产物）
+LOGS_DIR = RESULT_DIR / "logs"                               # 运行日志（每次执行追加）
 CONFIG_PATH = PYTHON_ROOT / "src" / "config.json"            # DeepSeek API 配置
 OUTPUT_BASE_DIR = RESULT_DIR                                 # 文章下载/转换输出目录（result/）
 

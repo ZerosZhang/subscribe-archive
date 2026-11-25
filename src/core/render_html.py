@@ -79,6 +79,37 @@ body {
 .index-item .digest-failed { color: #b3261e; }
 .index-item .digest-warn { color: #8a6d00; }
 .index-intro { color: #666; font-size: 0.9em; }
+.index-layout { display: grid; grid-template-columns: minmax(0, 1fr) 220px; gap: 28px; align-items: start; }
+.index-body { min-width: 0; }
+.index-toc {
+  position: sticky; top: 16px; align-self: start;
+  max-height: calc(100vh - 32px); overflow-y: auto;
+  padding-left: 14px; border-left: 1px solid #e5e5e5;
+  font-size: 0.88em; line-height: 1.6;
+}
+.index-toc .toc-title { font-weight: 600; color: #333; margin-bottom: 6px; }
+.index-toc ol { list-style: none; margin: 0; padding: 0; }
+.index-toc li { margin: 5px 0; display: flex; gap: 6px; align-items: baseline; }
+.index-toc a { color: #0b6bcb; text-decoration: none; word-break: break-all; }
+.index-toc a:hover { text-decoration: underline; }
+.index-toc .toc-count { color: #999; font-size: 0.85em; white-space: nowrap; margin-left: auto; }
+.index-section { margin: 20px 0 10px; font-size: 1.15em; }
+.feed-table { width: 100%; border-collapse: collapse; font-size: 0.9em; margin: 0 0 26px; }
+.feed-table th, .feed-table td { border: 1px solid #e5e5e5; padding: 6px 10px; text-align: left; vertical-align: top; }
+.feed-table th { background: #fafafa; font-weight: 600; }
+.feed-table .col-no { color: #999; width: 2.5em; }
+.feed-table .col-status { white-space: nowrap; }
+.feed-table .st-ok { color: #1b7f3b; }
+.feed-table .st-partial { color: #8a6d00; }
+.feed-table .st-none { color: #777; }
+.feed-table .st-fail { color: #b3261e; }
+.feed-table .st-unknown { color: #999; }
+.feed-table .col-detail { color: #666; }
+.index-source { scroll-margin-top: 16px; }
+@media (max-width: 900px) {
+  .index-layout { grid-template-columns: 1fr; }
+  .index-toc { display: none; }
+}
 @media (max-width: 600px) {
   body { padding: 0; }
   .wrap { padding: 16px; border-radius: 0; }
@@ -455,14 +486,35 @@ def _rewrite_images(html_text, downloaded):
     return _IMG_TAG_RE.sub(repl, html_text)
 
 
+def _asset_stem(date_prefix, full_url):
+    """图片文件的固定前缀（URL 摘要），重跑时同名复用（幂等）"""
+    digest = hashlib.sha1(full_url.encode("utf-8")).hexdigest()[:10]
+    return f"{date_prefix}_{digest}"
+
+
 def _asset_name(date_prefix, full_url, ext):
     """用 URL 摘要命名，保证重跑时同名复用（幂等）"""
-    digest = hashlib.sha1(full_url.encode("utf-8")).hexdigest()[:10]
-    return f"{date_prefix}_{digest}{ext}"
+    return f"{_asset_stem(date_prefix, full_url)}{ext}"
 
 
-def localize_images(html_text, base_url, assets_dir, date_prefix=None):
-    """下载 HTML 中的远程图片到 assets_dir，并把 src 改写为相对路径"""
+def _existing_assets(assets_dir, date_prefix):
+    """已下载的图片：{文件名主干: 完整文件名}（主干不含扩展名，扩展名由当时响应决定）"""
+    result = {}
+    assets_dir = Path(assets_dir)
+    if not assets_dir.exists():
+        return result
+    prefix = f"{date_prefix}_"
+    for path in assets_dir.iterdir():
+        if path.is_file() and path.stem.startswith(prefix):
+            result[path.stem] = path.name
+    return result
+
+
+def localize_images(html_text, base_url, assets_dir, date_prefix=None, refresh=False):
+    """下载 HTML 中的远程图片到 assets_dir，并把 src 改写为相对路径
+
+    refresh=False 时，assets/ 里已有同名文件（URL 摘要相同）直接复用、不再发请求。
+    """
     assets_dir = Path(assets_dir)
     assets_dir.mkdir(parents=True, exist_ok=True)
 
@@ -473,18 +525,28 @@ def localize_images(html_text, base_url, assets_dir, date_prefix=None):
     if not fulls:
         return html_text
 
+    existing = _existing_assets(assets_dir, date_prefix)
     full_to_name = {}
+    pending = []
+    for full in fulls:
+        name = existing.get(_asset_stem(date_prefix, full))
+        if name and not refresh:
+            full_to_name[full] = name
+        else:
+            pending.append(full)
+
     failed = []
-    with ThreadPoolExecutor(max_workers=IMAGE_WORKERS) as executor:
-        futures = [executor.submit(_download_image, (full, full)) for full in fulls]
-        for future in as_completed(futures):
-            orig, data, ext, error = future.result()
-            if data is not None:
-                name = _asset_name(date_prefix, orig, ext)
-                (assets_dir / name).write_bytes(data)
-                full_to_name[orig] = name
-            else:
-                failed.append((orig, error))
+    if pending:
+        with ThreadPoolExecutor(max_workers=IMAGE_WORKERS) as executor:
+            futures = [executor.submit(_download_image, (full, full)) for full in pending]
+            for future in as_completed(futures):
+                orig, data, ext, error = future.result()
+                if data is not None:
+                    name = _asset_name(date_prefix, orig, ext)
+                    (assets_dir / name).write_bytes(data)
+                    full_to_name[orig] = name
+                else:
+                    failed.append((orig, error))
     if failed:
         print(f"⚠️ 图片下载失败 {len(failed)}/{len(fulls)} 张")
         for url, error in failed[:5]:
@@ -651,10 +713,11 @@ def _truncate_display(s, max_width):
     return s
 
 
-def scan_and_convert(day_folder=None):
+def scan_and_convert(day_folder=None, refresh=False):
     """
     扫描 result/temp_data/raw/<日期>/ 中的原始 HTML，渲染到 result/<日期>/。
     day_folder: 如 "2026年05月18日"，默认当天。
+    refresh: True 时重新下载 assets/ 里已有的图片；默认复用（不发请求）
     返回 results 字典：{"success": [...], "failed": [...], "unknown": [...]}
     """
     if day_folder is None:
@@ -727,12 +790,25 @@ def scan_and_convert(day_folder=None):
     date_prefix = day_folder
     full_to_name = {}
 
+    # assets/ 里已有的图片直接复用，不再发请求（refresh=True 时照旧重下）
+    existing = {} if refresh else _existing_assets(assets_dir, date_prefix)
+    pending_urls = []
+    for full in full_urls:
+        name = existing.get(_asset_stem(date_prefix, full))
+        if name:
+            full_to_name[full] = name
+        else:
+            pending_urls.append(full)
+
     if full_urls:
         print(flush=True)
-        print(f"正在批量下载 {len(full_urls)} 张图片...", flush=True)
+        reused = len(full_urls) - len(pending_urls)
+        print(f"图片 {len(full_urls)} 张：复用已下载 {reused} 张，"
+              f"需下载 {len(pending_urls)} 张...", flush=True)
 
+    if pending_urls:
         with ThreadPoolExecutor(max_workers=IMAGE_WORKERS) as executor:
-            futures = [executor.submit(_download_image, (full, full)) for full in full_urls]
+            futures = [executor.submit(_download_image, (full, full)) for full in pending_urls]
             failed = []
             for future in as_completed(futures):
                 orig, data, ext, error = future.result()
@@ -749,7 +825,7 @@ def scan_and_convert(day_folder=None):
             for url, error in failed[:5]:
                 print(f"   · {url}（{error}）", flush=True)
         print(flush=True)
-    else:
+    elif not full_urls:
         # 没有图片时不必保留空 assets 目录
         try:
             assets_dir.rmdir()
@@ -816,8 +892,8 @@ def main():
                 print("  未知来源，需要添加新的解析策略")
             sys.exit(1)
     else:
-        # 批量模式：自动扫描当天原始 HTML
-        scan_and_convert()
+        # 批量模式：自动扫描当天原始 HTML（--refresh 时连图片也重下）
+        scan_and_convert(refresh="--refresh" in sys.argv)
 
 
 if __name__ == "__main__":

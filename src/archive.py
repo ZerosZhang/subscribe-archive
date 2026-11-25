@@ -65,6 +65,12 @@ def parse_args():
     parser.add_argument("--reindex", nargs="?", const="", metavar="日期1,日期2",
                         help="只重建索引页（不联网、不调 AI）：可给逗号分隔的日期，"
                              "省略日期则重建 result/ 下所有日期")
+    parser.add_argument("--refresh", action="store_true",
+                        help="强制重新下载：步骤 2 覆盖已有原始 HTML、步骤 3 重下已有图片"
+                             "（默认只补缺失，避免重复抓站点）")
+    parser.add_argument("--only-feed", type=str, metavar="名字",
+                        help="只检查这一个订阅源（名字或订阅地址），且不改写当天文章列表；"
+                             "有新增条目时并入已有列表。常与 --only-step 1 搭配")
     return parser.parse_args()
 
 
@@ -139,7 +145,10 @@ def main():
         print("❌ 不能同时使用 --start-step 和 --only-step")
         sys.exit(1)
 
-    if args.only_step is not None:
+    if args.only_feed and args.only_step is None and args.start_step is None:
+        # 单源刷新默认只跑步骤 1，避免顺带把 2/3/4 跑起来
+        start_step = end_step = 1
+    elif args.only_step is not None:
         if args.only_step < 1 or args.only_step > len(STEPS):
             print(f"❌ 无效的步骤编号: {args.only_step}（有效范围: 1-{len(STEPS)}）")
             sys.exit(1)
@@ -160,13 +169,24 @@ def main():
         print()
 
     selected_steps = list(range(start_step, end_step + 1))
+    if args.only_feed and 1 not in selected_steps:
+        print("❌ --only-feed 只作用于步骤 1，请配合 --only-step 1（或包含步骤 1 的范围）使用")
+        sys.exit(1)
     result = run_archive(
         selected_steps,
         today,
         log=lambda message: print(message, flush=True),
+        refresh=args.refresh,
+        only_feed=args.only_feed,
     )
 
     notify_failures(today, result)
+
+    # 单源刷新后顺手重建索引页（纯本地，不联网），让索引页的「仅链接」区块同步
+    if args.only_feed:
+        print()
+        print("正在用本地数据重建索引页...")
+        reindex_dates([today], log=lambda message: print(message, flush=True))
 
     if result["error"]:
         sys.exit(1)

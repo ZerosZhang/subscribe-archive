@@ -18,17 +18,38 @@
 网页版会自己检查这件事：进程启动后若有 `src/**/*.py` 被改动，启动归档时日志会打印
 `⚠️ 源码在服务启动后被改动过…当前进程仍运行旧代码`，首页定时说明那行也会变红。
 
+**发布后的三项确认**（按顺序看，缺一项就说明重启没成功）：
+
+1. `GET /api/schedule` 的 `stale_sources` 为 `[]`（为空 = 当前进程跑的是新代码）
+2. 监听端口与 `config.json` 的 `web.port` 一致（服务器上是 **39271**），`Get-CimInstance Win32_Process -Filter "Name='pythonw.exe'"` 能看到两个进程
+3. 新写的 `result/logs/<日期>.log` 有本次运行的段落（外壳 `run_archive()` 才会写）
+
 本项目**在远程 Windows Server 上部署和测试**，不在本机运行。服务器地址、账号、SSH 别名、系统版本等全部以这份文档为准，不要凭记忆填写：
 
 ```
 D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配置.md
 ```
 
-- **连接方式**：`ssh srv`（已配公钥免密）；传文件用 `scp 文件 srv:C:/路径/`。远程桌面用 `mstsc /v:<服务器IP>`，最多 2 个并发会话
+- **连接方式**：`ssh server`（已配公钥免密；别名 2026-11-20 由 `srv` 改名）；传文件用 `scp 文件 server:C:/路径/`。远程桌面用 `mstsc /v:<服务器IP>`，最多 2 个并发会话
 - **服务器部署路径**：`D:\Archive`（原 `D:\FoloArchive`，2026-11-17 改名；含 `.venv`，venv 的 `pyvenv.cfg` 指向 `C:\Program Files\Python314`）
 - **Python 基线**：`C:\Program Files\Python314\python.exe`，不在 `C:\Python314`（旧位置已废弃）
-- **GUI 启动限制**：SSH 会话里的进程落在 session 0，桌面窗口不可见。要在交互桌面启动需用 `schtasks /create ... /it` 建一次性任务再 `/run`
-- **代理**：服务器系统代理为 `127.0.0.1:7890`（mihomo），命令行工具需自行设置 `HTTP_PROXY` / `HTTPS_PROXY`
+- **GUI 启动限制**：SSH 会话里的进程落在 session 0，桌面窗口不可见。要在交互桌面启动需建**一次性计划任务**再 `/run`，
+  可用配方（RDP 断开也能跑，跑完记得删任务）：
+  ```powershell
+  Stop-Process -Name pythonw -Force
+  $a = New-ScheduledTaskAction -Execute 'D:\Archive\.venv\Scripts\pythonw.exe' -Argument '"D:\Archive\src\gui.py"' -WorkingDirectory 'D:\Archive'
+  $t = New-ScheduledTaskTrigger -Once -At (Get-Date).AddYears(1)
+  $p = New-ScheduledTaskPrincipal -UserId "$env:USERDOMAIN\$env:USERNAME" -LogonType Interactive
+  Register-ScheduledTask -TaskName RestartArchiveOnce -Action $a -Trigger $t -Principal $p | Out-Null
+  Start-ScheduledTask -TaskName RestartArchiveOnce; Start-Sleep 10
+  Unregister-ScheduledTask -TaskName RestartArchiveOnce -Confirm:$false
+  ```
+  坑：`schtasks /tr` 里写中文路径（`启动控制台.bat`）会被 PS 5.1 的 ANSI 解码弄坏，直接调度 `pythonw.exe` + ASCII 路径最稳
+- **代理**：服务器系统代理为 `127.0.0.1:7890`（Clash Party / mihomo），**TUN 关闭**（`tun.enable: false`），所以是「应用自愿遵守」而不是全系统强制：
+  - Python `urllib` 会读注册表系统代理，但**只在进程第一次发请求时确定一次并缓存在 `_opener` 里**，之后再改系统代理也不生效
+  - 因此**必须先起 Clash Party，再起归档服务**（开机自启顺序决定成败）；顺序反了进程就一路直连——被 DNS 污染的源（如 `www.v2ex.com` → 108.160.169.175）会超时，而其它直连能通的源一切正常，看起来就像「只有 v2ex 坏了」
+  - 排查用**进程内**实测：`POST http://127.0.0.1:<port>/api/discover` 传 `{"url":"https://www.v2ex.com/index.xml"}`，它在该进程里发请求；外面另起脚本测通、进程内失败，就是代理没被这个进程用上
+  - 少数站点要绕过代理（`_NO_PROXY_SITES`）或换普通 UA（`_PLAIN_UA_SITES`），见 `doc/save_webpages.md`
 
 ## 目录结构（关键路径）
 
@@ -40,11 +61,14 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
 ├── README.md                    # 公共仓库说明
 ├── doc/                         # 模块说明文档（与 src/ 结构对应）
 ├── result/                      # 数据目录（不提交 git）
-│   ├── temp_data/               # 文章列表 JSON（按日期命名）
+│   ├── temp_data/               # 文章列表 JSON + 当日结果（按日期命名）
+│   │   ├── 「YYYY年MM月DD日」.json        # 步骤 1 产出的文章列表
+│   │   ├── 「YYYY年MM月DD日」result.json  # 当日每源/每步结果（索引页唯一数据来源，见 doc/report.md）
 │   │   └── raw/YYYY年MM月DD日/  # 步骤 2 下载的原始 HTML（中间产物，不上传）
+│   ├── logs/                    # 运行日志 YYYY年MM月DD日.log（每次执行追加，见 doc/runlog.md）
 │   ├── YYYY年MM月DD日/          # 步骤 3/4 产出（可直接上传 NAS）
 │   │   ├── 「来源」标题.html     # 干净 HTML，只放内容（含 AI 摘要区块），样式外链 ../style.css
-│   │   ├── YYYY年MM月DD日.html  # 当天汇总索引页（同样外链 ../style.css）
+│   │   ├── YYYY年MM月DD日.html  # 当天汇总索引页（订阅结果表 + 分组正文 + 右侧悬浮目录）
 │   │   └── assets/              # 本地化图片
 │   └── style.css                # 公共样式表：所有日期、所有页面共用这一份，改一处全体生效
 ├── .agents/skills/              # 项目级 Skill（自动被发现）
@@ -52,7 +76,7 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
 │   ├── MarkdownFormat/SKILL.md
 └── src/                         # 源码
     ├── archive.py               # CLI 入口
-    ├── gui.py                   # 桌面小窗口（tkinter，三按钮 + 托盘，见 doc/gui.md）
+    ├── gui.py                   # 桌面小窗口（tkinter，两个按钮 + 托盘，见 doc/gui.md）
     ├── trayicon.py              # 系统托盘图标（纯 ctypes，见 doc/trayicon.md）
     ├── webui.py                 # 本地网页版界面 + 服务生命周期（纯标准库，见 doc/webui.md）
     ├── webui_page.py            # 网页版单页 HTML/CSS/JS（归档页 PAGE + 订阅配置页 CONFIG_PAGE）
@@ -68,12 +92,14 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
     │   ├── waf.py               # openresty WAF 的 JS 挑战（换通行 Cookie，见 doc/waf.md）
     │   ├── render_html.py       # 原始 HTML → 干净 HTML（策略模式 + 图片本地化）
     │   ├── summarize.py         # AI 生成摘要并注入 HTML
+    │   ├── report.py            # 当日结果持久化（每源/每步结果 + 失败原因，索引页数据源，见 doc/report.md）
+    │   ├── runlog.py            # 运行日志落盘 result/logs/（见 doc/runlog.md）
     │   └── notify.py            # 失败邮件通知（见 doc/notify.md）
     ├── strategies/              # 正文解析策略（每来源一个文件）
     └── watchers/                # 列表页抓取器框架（可扩展，当前无内置站点）
 ```
 
-**注意**：所有路径统一以 `src/core/utils.py` 中的常量为准（`PYTHON_ROOT`/`RESULT_DIR`/`TEMP_DIR`/`RAW_DIR`/`CONFIG_PATH`/`OUTPUT_BASE_DIR`），不要在其他模块硬编码路径。
+**注意**：所有路径统一以 `src/core/utils.py` 中的常量为准（`PYTHON_ROOT`/`RESULT_DIR`/`TEMP_DIR`/`RAW_DIR`/`LOGS_DIR`/`CONFIG_PATH`/`OUTPUT_BASE_DIR`），不要在其他模块硬编码路径。
 
 ## 常用命令（均使用 .venv）
 
@@ -94,6 +120,12 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
 .venv/Scripts/python.exe src/archive.py --reindex "2026年11月14日,2026年11月15日"
 .venv/Scripts/python.exe src/archive.py --reindex        # result/ 下所有日期目录
 
+# 只刷新某一个订阅源（只发 1 次请求，不改写当天文章列表，跑完本地重建索引页）
+.venv/Scripts/python.exe src/archive.py --only-feed V2EX
+
+# 强制重新下载：步骤 2 覆盖已有原始 HTML、步骤 3 重下已有图片（默认只补缺失）
+.venv/Scripts/python.exe src/archive.py --refresh --only-step 2
+
 # 列出所有步骤
 .venv/Scripts/python.exe src/archive.py --list-steps
 
@@ -106,7 +138,7 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
 
 # 网页版界面（纯标准库，无第三方依赖；日常通过 启动控制台.bat 启动）
 .venv/Scripts/python.exe src/webui.py
-.venv/Scripts/python.exe src/webui.py --host 0.0.0.0 --port 8765   # 允许局域网访问
+.venv/Scripts/python.exe src/webui.py --host 0.0.0.0 --port 8765   # 允许局域网访问（端口默认 8765，可被 config.json 的 web 段覆盖）
 .venv/Scripts/python.exe src/webui.py --no-browser                  # 不自动打开浏览器
 
 # 常驻定时运行（不用计划任务；在项目目录下直接运行，结束进程即停止）
@@ -139,12 +171,25 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 
 | 编号 | 名称 | 说明 |
 |------|------|------|
-| 1 | fetch | 抓取 `src/watch_feeds.json` 的 RSS/Atom，按 guid 去重后产出新条目。**当天 `result/temp_data/「日期」.json` 已存在则跳过抓取，直接复用**（不发网络请求、不标记已读）；要强制重抓需删掉该 JSON 或用 `--date` 指定别的日期 |
-| 2 | download | 下载原始 HTML 到 `result/temp_data/raw/<日期>/` 并优化文件名。**以 `overwrite=True` 调用，重跑时覆盖旧文件** |
-| 3 | convert | 策略识别 + 清洗，渲染为干净 HTML（图片本地化到 `assets/`）。对 raw 目录逐个重渲染，本就覆盖写 |
+| 1 | fetch | 抓取 `src/watch_feeds.json` 的 RSS/Atom，按 guid 去重后产出新条目。**当天 `result/temp_data/「日期」.json` 已存在则跳过抓取，直接复用**（不发网络请求、不标记已读）；要强制重抓需删掉该 JSON 或用 `--date` 指定别的日期。**例外**：`--only-feed <名字>` 只检查那一个源、不受该跳过规则限制，且不改写列表文件 |
+| 2 | download | 下载原始 HTML 到 `result/temp_data/raw/<日期>/` 并优化文件名。**默认只补缺失**（`overwrite=False`，已存在的原始 HTML 直接跳过，不重复抓站点）；`--refresh` 才全部覆盖重下 |
+| 3 | convert | 策略识别 + 清洗，渲染为干净 HTML（图片本地化到 `assets/`）。对 raw 目录逐个重渲染，本就覆盖写；**图片默认复用 assets/ 里已有的（按 URL 摘要同名跳过），`--refresh` 才重下** |
 | 4 | summarize | AI 生成文章摘要并注入 HTML，生成当日索引页。**断点续跑：已有摘要的文章跳过（不调 API，直接复用），只补没摘要的那几篇**；`_summarize_step(..., force=True)` 才全部重算。索引页**以 `temp_data/「日期」.json` 的条目为准**（JSON 多少条就列多少条）；下载/渲染/摘要失败的条目在页内标注（无成品 HTML 时标题直链原文 URL） |
 
-**同一天重跑**：复用列表（步骤 1 跳过）→ 重下载覆盖（步骤 2）→ 重渲染覆盖（步骤 3）→ 摘要**跳过已成功的、只补失败的** + 重建索引页（步骤 4，日志里 `·` 表示跳过、`✓` 表示新生成）。
+索引页 = **顶部订阅结果表**（每源：获取更新失败 / 全部失败 / 部分成功 n/m / 全部成功 m / 无更新 / 未检查 + 逐工序失败篇数）
++ 按来源分组的正文 + 仅链接热榜，右侧是 `position: sticky` 的悬浮目录（窄屏隐藏）。
+数据全部来自本地文件（`「日期」result.json` + 文章列表 JSON + 成品 HTML），**不联网、不看运行态**：
+「仅链接」源当天抓取失败时整段跳过（不再回退显示最近 30 条），`--reindex` 生成的页面与当天一致。
+
+**同一天重跑**：复用列表（步骤 1 跳过）→ **只补缺失的原始 HTML**（步骤 2，已下的跳过）→ 重渲染（步骤 3，图片已在本地的直接复用）→ 摘要**跳过已成功的、只补失败的** + 重建索引页（步骤 4）。重跑几乎不再产生下载流量；确实要重抓页面/图片时加 `--refresh`。当日结果文件按步骤合并：跑过的步骤覆盖对应统计、没跑的不动，本次成功的文件会清掉旧的失败标注；日志按执行分段追加到 `result/logs/<日期>.log`。
+
+**只想刷新某一个源**（如 V2EX）时不要重跑整个步骤 1：
+
+```bash
+.venv/Scripts/python.exe src/archive.py --only-feed V2EX   # 只请求这一个源，然后本地重建索引页
+```
+
+`--only-feed` 默认只跑步骤 1，**不改写当天的文章列表**（有新增条目时并入已有列表），也不改写 `last_check.json`；跑完自动 `reindex`，不下载任何网页。
 
 `run_archive(selected_steps, today, log, on_progress=None, should_stop=None)` 通过回调解耦界面：
 - CLI（archive.py）传 `log=print`
@@ -152,8 +197,16 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - 返回值 dict 含 `article_list`/`download`/`conversion`/`summary_result`/`step_times`/`error`/`failures`；`failures` 为字符串列表，**只汇总系统性/流程级失败**（步骤 1 抓取或列表加载失败、流程 error、索引页写入失败）供失败邮件判定；步骤 2/3/4 的逐条内容失败只进日志与索引页标注，**不再发邮件**
 - 修改流程逻辑只需改 `archive_core.py`，两入口同步生效
 - `reindex_dates(dates, log)`：**只重建索引页**，不联网、不调 AI。用 `temp_data/「日期」.json` 作条目来源、
-  用成品 HTML 里已有的 `data-folo="summary"` 文本作摘要；没有摘要的条目按「摘要失败」标注，没有列表
-  JSON 时回退为按成品文件生成。CLI 入口 `archive.py --reindex`，用于补正被旧代码生成错的索引页
+  用成品 HTML 里已有的 `data-folo="summary"` 文本作摘要、用 `「日期」result.json` 的 `notes` 还原失败标注；
+  没有摘要的条目按「摘要失败」标注，没有列表 JSON 时回退为按成品文件生成。CLI 入口 `archive.py --reindex`，
+  用于补正被旧代码生成错的索引页
+
+### src/core/report.py / src/core/runlog.py
+- `report.py`：一个日期一份 `result/temp_data/「日期」result.json`，`update_fetch/download/render/summary()`
+  按步骤合并写入；`feed_rows()` 给索引页表格、`notes()` 给就地标注、`failed_fetch_urls()` 决定跳过哪个热榜分组。
+  详见 `doc/report.md`
+- `runlog.py`：`run_archive()` 外壳把整轮输出（含底层模块 `print()`）追加到 `result/logs/<日期>.log`，
+  结束恢复 `sys.stdout`；CLI 与网页版都自动生效，`reindex_dates()` 不产生日志文件。详见 `doc/runlog.md`
 
 ## 核心脚本行为要点
 
@@ -169,7 +222,7 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 ### core/save_webpages.py
 - 所有来源统一用 `urllib.request` 下载原始 HTML 到 `result/temp_data/raw/<日期>/`，由步骤 3 渲染
 - 下载失败记录到 `failed_urls` 并返回干净原因（无 HTML 注释/换行），不中断流程
-- `download_articles(..., overwrite=False)` 默认不覆盖已存在文件，CLI 用 `--overwrite` 强制覆盖；**归档管线（`archive_core._download_step`）固定传 `overwrite=True`**
+- `download_articles(..., overwrite=False)` 默认不覆盖已存在文件，CLI 用 `--overwrite` 强制覆盖；**归档管线传 `overwrite=refresh`**（默认 False，即重跑只补缺失；`--refresh` 才覆盖重下）
 - `_NO_PROXY_SITES`（如 `meta.appinn.net`）绕过系统代理直连；`_PLAIN_UA_SITES`（如 `mobius.blog`）改用普通客户端 UA
 - 读到 openresty WAF 的 JS 挑战页（几百字节 + `_hgk` token）时交给 `waf.fetch()` 换通行 Cookie 后重取，见 `doc/waf.md`
 
@@ -225,7 +278,7 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 ### webui.py（网页版界面 + 服务生命周期，纯标准库，见 doc/webui.md）
 - `ThreadingHTTPServer` + 单页界面，**零第三方依赖**（Windows Server 2016 也能跑）；可独立运行，也可被 `gui.py` 嵌进同进程
 - **服务生命周期**归 `webui`：`Service`（`serve_in_background()` / `serve_forever()` / `stop()`）与 `start_service(host, port, schedule, mirror)`（建服务 + 接管 stdout/stderr + 启停内建定时，端口占用抛 `OSError`）；`main()` 与 `gui.py` 共用，改动只需改一处。注意 `main()` 里 `mirror=sys.stdout` 必须在调用前求值
-- 绑定 `127.0.0.1:8765`（`--host 0.0.0.0` 才允许局域网访问）；启动后自动开浏览器（`--no-browser` 可关）
+- 监听地址按「命令行参数 → `config.json` 的 `web` 段 → 默认 `127.0.0.1:8765`」确定（`resolve_host_port()`）；**服务器上 config.json 配的是 `0.0.0.0:39271`**，所以线上地址是 `http://<服务器IP>:39271/`，不是 8765。启动后自动开浏览器（`--no-browser` 可关）
 - `sys.stdout`/`sys.stderr` 重定向到线程安全的 `LogBuffer`（`deque(maxlen=2000)`，支持增量拉取），底层模块的 `print()` 也能进页面日志
 - 归档在后台线程跑，同一时间只允许一次；停止经 `should_stop` 在步骤边界生效
 - **内建每日定时**（默认开启，`--no-schedule` 关闭）：启动时抢占命名互斥量 `SubscribeArchiveScheduler`，拿到就起 daemon 调度线程、并长期持有句柄；拿不到（外部 `scheduler.py` 在跑）只记日志、不重复调度。调度线程每 20 秒检查一次，满足 `enabled` + 到点 + 当天未跑 + 当天 `result/temp_data/「日期」.json` 不存在才触发；**进程启动时若已过当天的定时点，不补跑**（记 `_SCHED_LAST_RUN_DATE` 跳过，等明天），触发直接调 `start_run([1,2,3,4], 今天)`，成功才记 `_SCHED_LAST_RUN_DATE`
@@ -272,7 +325,7 @@ Windows Server 无界面场景直接跑 CLI：
 .venv/Scripts/python.exe src/archive.py
 ```
 
-- 日志默认输出到 stdout，**不会**自动写入 `result\archive.log`；需要留存请自行重定向
+- 日志同时输出到 stdout 与 **`result/logs/<日期>.log`**（`run_archive()` 落盘，同一天多次执行追加分段，见 `doc/runlog.md`）；排障先看这个文件。需要另存时仍可在任务计划程序里重定向
 - 计划任务以运行时的当前账户启动，因此能读到该账户的配置与状态库
 - 服务器上**只需** `.venv\Scripts\pip install openai`（CLI 与网页版都不需要界面库；桌面小窗口需要 tkinter）
 - 新机器部署：双击 `一键部署.bat`（检查 Python/tkinter → 建/修复 venv → 装 openai → 自检 → 可选启动桌面窗口）

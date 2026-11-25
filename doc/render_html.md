@@ -18,6 +18,7 @@
 
 - 输入：`result/temp_data/raw/<日期>/` 下的原始 HTML
 - 输出：`result/<日期>/「来源」标题.html` + `assets/` 图片目录，以及**数据根目录**的 `result/style.css`
+- 图片按 URL 摘要命名（`<日期>_<sha1前10位>.<ext>`），**`assets/` 里已有同名文件就直接复用、不再发请求**；`scan_and_convert(..., refresh=True)` 或 `--refresh` 才重下。`localize_images()` 用同样规则
 
 原始 HTML 与成品 HTML 分目录存放，避免同名 `.html` 相互覆盖。
 
@@ -28,6 +29,9 @@
 
 - 改 `result/style.css` 一个文件，全部页面立刻跟着变，页面文件本身不用动；
 - 内容与现有文件一致时跳过写入，重渲染不会白白改动 mtime（对 NAS / 同步盘友好）。
+- 索引页专用样式也在 `BASE_CSS` 里：`.index-layout`（正文 + 目录两栏栅格）、
+  `.index-toc`（`position: sticky`，窄屏 900px 以下隐藏）、`.feed-table`（订阅结果表，
+  状态色 `.st-ok/.st-partial/.st-none/.st-fail/.st-unknown`）
 
 > 代价：`result/` 根下的 `style.css` 是日期目录之外的公共文件。单独把**一个**日期目录
 > 拷到 NAS 会掉样式，需要连 `result/style.css` 一起带（整个 `result/` 同步则不受影响）。

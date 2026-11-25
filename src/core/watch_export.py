@@ -292,14 +292,21 @@ def _save_feed_state(conn, url, title, etag, modified, error, fail_inc):
 
 
 def check_feed(conn, feed):
-    """检查单个订阅。返回 (新增文章列表, 失败原因)
+    """检查单个订阅。返回 (新增文章列表, 失败原因, 状态信息)
 
     订阅地址有两种：
     - 普通 RSS/Atom：走 HTTP + feedparser（支持 ETag/304）
     - 站点列表页（如 B 站 UP 主页）：交给对应 watcher 抓接口
+
+    状态信息供「当日结果」与索引页表格使用：
+      {"name","url","archive","status","new","entries","error"}
+    status: ok（有更新）/ not_modified（无更新）/ first_run（首次基线）/ error（失败）
     """
     url = feed["url"].strip()
     name = feed.get("name") or url
+    archive = feed.get("archive", True) is not False
+    info = {"name": name, "url": url, "archive": archive,
+            "status": "ok", "new": 0, "entries": 0, "error": ""}
     row = conn.execute("SELECT * FROM feeds WHERE url = ?", (url,)).fetchone()
     etag = row["etag"] if row else None
     modified = row["modified"] if row else None
@@ -326,8 +333,10 @@ def check_feed(conn, feed):
         status, payload, new_etag, new_modified = fetch_feed(url, etag, modified)
         if status == "not_modified":
             _save_feed_state(conn, url, None, etag, modified, None, False)
+            conn.commit()
             print(f"  · {name}：无更新（304）")
-            return [], None
+            info["status"] = "not_modified"
+            return [], None, info
         if status == "ok":
             feed_title, entries, bozo = _parse_feed(payload)
             if not entries:
@@ -336,15 +345,19 @@ def check_feed(conn, feed):
 
     if status == "error":
         _save_feed_state(conn, url, None, etag, modified, payload, True)
+        conn.commit()
         print(f"  ✗ {name}：抓取失败 — {payload}")
-        return [], f"{name}: {payload}"
+        info["status"] = "error"
+        info["error"] = str(payload)
+        return [], f"{name}: {payload}", info
 
     known = conn.execute(
         "SELECT COUNT(*) FROM entries WHERE feed_url = ?", (url,)
     ).fetchone()[0]
     first_run = known == 0
     # archive=false：只在日志里提示新条目，不交给后续归档步骤（如只想知道热榜有什么）
-    do_archive = feed.get("archive", True) is not False
+    do_archive = archive
+    info["entries"] = len(entries)
 
     articles = []
     stamp = _now_text()
@@ -375,6 +388,9 @@ def check_feed(conn, feed):
     _save_feed_state(conn, url, feed_title, new_etag, new_modified, None, False)
     conn.commit()
 
+    info["status"] = "first_run" if first_run else ("ok" if articles else "not_modified")
+    info["new"] = 0 if first_run else len(articles)
+
     if not do_archive:
         articles = [a for a in articles if a.pop("no_archive", False)]
         if first_run:
@@ -385,7 +401,7 @@ def check_feed(conn, feed):
                 print(f"      - {item['published']} {item['title']}")
         else:
             print(f"  · {name}：无更新")
-        return [], None
+        return [], None, info
 
     if first_run:
         print(f"  ◐ {name}：首次检查，记录 {len(entries)} 条为基线（不当作更新）")
@@ -395,7 +411,7 @@ def check_feed(conn, feed):
             print(f"      - {article['published']} {article['title']}")
     else:
         print(f"  · {name}：无更新")
-    return articles, None
+    return articles, None, info
 
 
 def list_feeds_state():
@@ -591,31 +607,53 @@ def _write_last_check(failures):
         print(f"⚠️  检查结果写入失败：{exc}")
 
 
-def export_articles(skip_auth_check=False):
+def export_articles(skip_auth_check=False, only_feed=None):
     """检查所有订阅，把新增文章写成 temp_data/「日期」.json
 
-    返回 (today, article_list, output_path, failure_reason)
+    only_feed: 只检查这一个源（按名字或网址匹配）。此时**不会覆盖**当天的列表文件：
+      有新增文章就并入已有列表，没有就完全不动文件，也不改写 last_check.json。
+      用于「只想刷新某个源」，避免为了一个源把 26 个源和整天的文章全部重抓。
+
+    返回 (today, article_list, output_path, failure_reason, feed_results)
+    feed_results 为每个源的抓取状态（见 check_feed），供当日结果与索引页表格使用
     """
     today = datetime.now().strftime("%Y年%m月%d日")
     TEMP_DIR.mkdir(parents=True, exist_ok=True)
 
     feeds = load_watch_feeds()
     if not feeds:
-        return today, [], None, "订阅列表为空（src/watch_feeds.json）"
+        return today, [], None, "订阅列表为空（src/watch_feeds.json）", []
+
+    if only_feed:
+        wanted = only_feed.strip().lower()
+        matched = [f for f in feeds
+                   if (f.get("name") or "").strip().lower() == wanted
+                   or f["url"].strip().lower() == wanted]
+        if not matched:
+            names = "、".join((f.get("name") or f["url"]) for f in feeds)
+            return today, [], None, f"订阅列表里没有「{only_feed}」（可选：{names}）", []
+        feeds = matched
 
     print(f"正在检查 {len(feeds)} 个订阅源...")
     conn = _connect()
     article_list = []
     failures = []
     failure_items = []
+    feed_results = []
     try:
         for feed in feeds:
             try:
-                articles, failure = check_feed(conn, feed)
+                articles, failure, info = check_feed(conn, feed)
             except Exception as exc:  # 单源异常不影响其他源
-                articles, failure = [], f"{feed.get('name') or feed['url']}: 异常 {exc}"
+                name = feed.get("name") or feed["url"]
+                articles, failure = [], f"{name}: 异常 {exc}"
+                info = {"name": name, "url": feed["url"],
+                        "archive": feed.get("archive", True) is not False,
+                        "status": "error", "new": 0, "entries": 0,
+                        "error": f"异常 {exc}"}
                 print(f"  ✗ {failure}")
             article_list.extend(articles)
+            feed_results.append(info)
             if failure:
                 failures.append(failure)
                 failure_items.append({
@@ -626,7 +664,9 @@ def export_articles(skip_auth_check=False):
     finally:
         conn.close()
 
-    _write_last_check(failure_items)
+    if not only_feed:
+        # 单源刷新时不改写整体状态，避免把其它源的异常记录冲掉
+        _write_last_check(failure_items)
     failure_reason = "；".join(failures) if failures else None
 
     if not article_list:
@@ -634,15 +674,50 @@ def export_articles(skip_auth_check=False):
             print(f"\n未获取到新文章，且存在失败：{failure_reason}")
         else:
             print("\n没有新文章")
-        return today, [], None, failure_reason
+        return today, [], None, failure_reason, feed_results
 
     article_list.sort(key=lambda a: a["published"], reverse=True)
     output_path = TEMP_DIR / f"「{today}」.json"
+    if only_feed:
+        added = _merge_article_list(output_path, article_list)
+        print(f"\n共 {len(article_list)} 篇新文章（仅 {only_feed}）")
+        print(f"  已并入当天列表: {output_path}（新增 {added} 条）")
+        if added:
+            print("  提示：新文章还没下载，需要时再跑步骤 2/3/4")
+    else:
+        with open(output_path, "w", encoding="utf-8") as f:
+            json.dump(article_list, f, ensure_ascii=False, indent=2)
+        print(f"\n共 {len(article_list)} 篇新文章")
+        print(f"  已保存: {output_path}")
+    return today, article_list, output_path, failure_reason, feed_results
+
+
+def _merge_article_list(output_path, articles):
+    """把新条目并入已有的当天列表（按 entry_id/url 去重），返回新增条数"""
+    existing = []
+    if output_path.exists():
+        try:
+            with open(output_path, "r", encoding="utf-8") as f:
+                existing = json.load(f)
+        except (OSError, json.JSONDecodeError):
+            existing = []
+    if not isinstance(existing, list):
+        existing = []
+
+    def _key(item):
+        return item.get("entry_id") or item.get("url")
+
+    seen = {_key(item) for item in existing}
+    added = 0
+    for item in articles:
+        if _key(item) not in seen:
+            seen.add(_key(item))
+            existing.append(item)
+            added += 1
+    existing.sort(key=lambda a: a.get("published") or "", reverse=True)
     with open(output_path, "w", encoding="utf-8") as f:
-        json.dump(article_list, f, ensure_ascii=False, indent=2)
-    print(f"\n共 {len(article_list)} 篇新文章")
-    print(f"  已保存: {output_path}")
-    return today, article_list, output_path, failure_reason
+        json.dump(existing, f, ensure_ascii=False, indent=2)
+    return added
 
 
 def main():
@@ -660,7 +735,7 @@ def main():
         print(f"共 {len(rows)} 个源，异常 {bad} 个")
         return 1 if bad else 0
 
-    today, article_list, output_path, failure_reason = export_articles()
+    today, article_list, output_path, failure_reason, _feed_results = export_articles()
     if failure_reason:
         print(f"\n失败: {failure_reason}")
     if not article_list:
