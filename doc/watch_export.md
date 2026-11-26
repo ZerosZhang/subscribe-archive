@@ -36,9 +36,11 @@
 - 抓取失败/成功都会 `conn.commit()`：失败时 `feeds.last_error`、`fail_count`、`last_check` 会当场落库（旧版本失败分支漏了提交，导致配置页的「连续 N 次」不涨）
 - `validate_feeds()`：逐条实抓校验订阅链接（只读，不改 ETag/状态），网页版「订阅配置 → 检测链接」和 `python src/core/watch_export.py --validate` 都调用它
 - 订阅项可加 `"archive": false`：仍然检查更新，但不交给后续下载/渲染步骤；每日索引页会把它们编成「十、知乎热榜（仅链接）」这样的分组接在正文分组之后，只有标题和原文链接（`list_trend_entries(date=...)` 取当天抓到的条目，没有则回退最新若干条）。**当天抓取失败的源，索引页直接跳过整个分组**（不再回退显示旧内容），失败原因写进顶部结果表
+- **新订阅默认「仅链接」**：`add_feed()` 追加的订阅项一律带 `"archive": false`（常量 `DEFAULT_FEED_ARCHIVE`），只提供标题与链接、不下载原文也不做 AI 摘要；要全文归档的源在 `watch_feeds.json` 里显式写 `"archive": true`。缺这个字段的老订阅沿用 `feed.get("archive", True)` 的旧语义（按归档处理），不受这条默认值影响
 - 首次检查某个源时**只记基线、不当作更新**，避免第一次就把历史文章全部归档
 - 遇到 openresty WAF 的 JS 挑战页（如零度博客的 `/feed`）自动换通行 Cookie 后重取，见 `doc/waf.md`
 - 有专用策略的来源（`resolve_strategy_for_feed()` 命中）会在入库前用策略的 `clean_title()` 去掉标题尾部的站点名，与渲染时同一套规则
+- 订阅项可加 `"strategy": "<策略>"` 手工标注实际命中的策略（认模块名 `hexo_blog`、显示名 `Hexo博客`，也认模块名前缀 `hexo`）。它只影响配置页「策略」列的展示与 `clean_title()` 的选取，**不改变真实转换**——转换时仍按页面结构 `detect()` 匹配，写错了不会套错策略，只是显示不准
 - `discover_feeds(url)`：从任意网址找 feed——先试地址本身，再解析网页里
   `<link rel="alternate" type="application/rss+xml|atom+xml">`，最后猜 `/feed`、`/rss` 等常见路径；
   每个候选都会实抓验证，最多返回 6 个；找不到时提示改用 RSSHub

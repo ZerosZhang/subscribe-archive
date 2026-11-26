@@ -10,7 +10,6 @@ from . import appinn
 from . import iplaysoft
 from . import ruanyifeng
 from . import cnblogs
-from . import v2ex
 from . import sean
 from . import endler
 from . import echosoar
@@ -18,14 +17,11 @@ from . import ftium4
 from . import baoyu
 from . import tumeng
 from . import kr36
-from . import down423
 from . import tw93_weekly
 from . import hexo_blog
 from . import hello_github
 from . import coldwind
 from . import zishu
-from . import mobius
-from . import wang_zhiyong
 from . import ezindie
 from . import yu_gao
 from . import freedidi

@@ -847,6 +847,8 @@ class Handler(BaseHTTPRequestHandler):
             return self._send_json(load_last_check())
         if path == "/api/feeds":
             return self._send_json(feeds_payload())
+        if path == "/api/strategies":
+            return self._send_json(strategies_payload())
         if path.startswith("/archive/"):
             return self._serve_archive(path)
         if path == "/api/state":
@@ -903,6 +905,24 @@ class Handler(BaseHTTPRequestHandler):
                 ok, message = False, "action 应为 add 或 remove"
             return self._send_json({"ok": ok, "message": message,
                                     "feeds": feeds_payload()["feeds"]})
+        if path == "/api/strategies":
+            import strategy_admin
+            names = body.get("names")
+            if body.get("action") != "delete":
+                return self._send_json({"ok": False, "error": "action 应为 delete"})
+            if not isinstance(names, list):
+                return self._send_json({"ok": False, "error": "names 应为数组"})
+            try:
+                from watch_export import list_feeds_state
+                used = set(used_strategy_names(list_feeds_state()))
+            except Exception as exc:  # noqa: BLE001 - 判断不了就不许删
+                return self._send_json({"ok": False, "error": f"读取订阅失败：{exc}"})
+            ok, message, deleted, skipped = strategy_admin.delete_strategies(names, used)
+            payload = strategies_payload()
+            payload.update({"ok": ok, "message": message,
+                            "deleted": deleted, "skipped": skipped,
+                            "need_restart": bool(deleted)})
+            return self._send_json(payload)
         return self._send_json({"ok": False, "error": "未知路径"}, status=404)
 
 
@@ -939,13 +959,46 @@ def feeds_payload():
     try:
         from strategies import resolve_strategy_for_feed
         for feed in feeds:
-            strategy = resolve_strategy_for_feed(feed["url"], feed["name"])
+            strategy = resolve_strategy_for_feed(feed["url"], feed["name"],
+                                                   feed.get("strategy_hint") or "")
             feed["strategy"] = strategy.name if strategy else ""
     except Exception:  # noqa: BLE001 - 策略判断失败不影响列表
         for feed in feeds:
             feed.setdefault("strategy", "")
 
     return {"ok": error is None, "feeds": feeds, "error": error}
+
+
+def used_strategy_names(feeds):
+    """按订阅列表算出当前被匹配到的策略名 → 用到它的订阅名"""
+    from strategies import resolve_strategy_for_feed
+
+    mapping = {}
+    for feed in feeds:
+        try:
+            strategy = resolve_strategy_for_feed(feed["url"], feed["name"],
+                                                   feed.get("strategy_hint") or "")
+        except Exception:  # noqa: BLE001 - 单条判断失败不影响整体
+            continue
+        if strategy:
+            mapping.setdefault(strategy.name, []).append(feed["name"])
+    return mapping
+
+
+def strategies_payload():
+    """配置页「未使用的策略」板块数据"""
+    try:
+        import strategy_admin
+        from watch_export import list_feeds_state
+
+        feeds = list_feeds_state()
+        mapping = used_strategy_names(feeds)
+        used, unused = strategy_admin.inventory(set(mapping))
+        for item in used:
+            item["feeds"] = mapping.get(item["name"], [])
+        return {"ok": True, "used": used, "unused": unused, "error": None}
+    except Exception as exc:  # noqa: BLE001 - 页面要能显示原因
+        return {"ok": False, "used": [], "unused": [], "error": f"读取策略失败：{exc}"}
 
 
 def _load_web_config():

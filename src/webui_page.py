@@ -493,8 +493,12 @@ table.feeds .url{font-family:monospace;font-size:12px;
 .badge.ok{background:#dafbe1;color:#1a7f37}
 .badge.bad{background:#ffebe9;color:#cf222e}
 .badge.own{background:#ddf4ff;color:#0969da;margin-left:0}
+.badge.linkonly{background:#ffebe9;color:#cf222e}
+.badge.warn{background:#fff8c5;color:#9a6700;margin-left:0}
+th.pick,td.pick{width:30px;padding-right:0}
 .status-cell{font-size:12px}
 .status-line{white-space:nowrap}
+.status-line .stale{color:#cf222e}
 button.danger{white-space:nowrap}
 .err{color:#cf222e;font-size:12px}
 #msg{font-size:12px}
@@ -513,7 +517,9 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
 <body>
 <div class="wrap">
   <h1>订阅配置<a class="linkbtn" href="/">← 返回归档</a></h1>
-  <p class="hint">当前列表来源：本地订阅检查 —— 这里添加的源会在下次归档时自动检查</p>
+  <p class="hint">当前列表来源：本地订阅检查 —— 这里添加的源会在下次归档时自动检查；
+    新订阅默认「仅链接」（只列标题与链接，不下载原文、不做 AI 摘要），要全文归档需在
+    <code>src/watch_feeds.json</code> 里给该源加 <code>"archive": true</code></p>
 
   <section class="card">
     <h2>已添加的订阅源
@@ -525,6 +531,22 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
         <tbody id="feeds-body"><tr><td colspan="5" class="muted">加载中…</td></tr></tbody>
       </table>
     </div>
+  </section>
+
+  <section class="card">
+    <h2>未使用的解析策略
+      <button id="del-strategies" class="danger">删除选中</button>
+    </h2>
+    <p class="hint">这些策略没有匹配到任何订阅。「按页面结构识别」的策略不认域名，
+      可能仍在为「按格式」的源抽取正文，删除后这些源会转换失败，删除前请确认。</p>
+    <div class="table-scroll">
+      <table class="feeds">
+        <thead><tr><th class="pick"><input type="checkbox" id="strategy-all"></th>
+          <th>策略</th><th>文件</th><th>说明</th></tr></thead>
+        <tbody id="strategies-body"><tr><td colspan="4" class="muted">加载中…</td></tr></tbody>
+      </table>
+    </div>
+    <div id="strategy-msg" class="hint"></div>
   </section>
 
   <section class="card">
@@ -552,10 +574,20 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
 
   function renderSource(){ /* 来源固定为本地订阅检查，无需切换 */ }
 
+  function agoText(feed){
+    if(!feed.last_update){ return "还没有记录到更新"; }
+    var days = feed.update_days;
+    if(days === null || days === undefined){ return esc(feed.last_update) + " 更新"; }
+    if(days <= 0){ return "今天更新"; }
+    var text = days + " 天前更新";
+    // 一个月没新条目就当停更，标红
+    return days >= 30 ? '<span class="stale">' + text + "</span>" : text;
+  }
+
   function statusCell(feed){
     var parts = [];
     parts.push("已记录 " + (feed.entries || 0) + " 条");
-    if(feed.last_check){ parts.push("上次检查 " + esc(feed.last_check)); }
+    parts.push(agoText(feed));
     var html = '<div class="status-line">' + parts.join(" · ") + "</div>";
     if(feed.last_error){
       html += '<div class="err">最近失败：' + esc(feed.last_error) +
@@ -575,9 +607,12 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
     body.innerHTML = "";
     feeds.forEach(function(feed){
       var tr = document.createElement("tr");
-      var strategy = feed.strategy
-        ? '<span class="badge own">' + esc(feed.strategy) + '</span>'
-        : '<span class="muted">通用</span>';
+      // 仅链接的源不下载正文，解析策略用不上，策略列直接显示「仅链接」
+      var strategy = feed.archive === false
+        ? '<span class="badge linkonly" title="只列链接，不下载原文、不做摘要">仅链接</span>'
+        : (feed.strategy
+            ? '<span class="badge own">' + esc(feed.strategy) + '</span>'
+            : '<span class="muted" title="没有专属策略，按页面结构匹配解析规则">按格式</span>');
       tr.innerHTML =
         '<td class="name">' + esc(feed.name) +
           (feed.last_error ? '<span class="badge bad">异常</span>'
@@ -618,6 +653,76 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
       else { load(); }
     }).catch(function(e){ el("msg").textContent = "请求失败：" + e; });
   }
+
+  // ---- 未使用的解析策略 ----
+  function renderStrategies(data){
+    var body = el("strategies-body");
+    var all = el("strategy-all");
+    all.checked = false;
+    if(!data || data.ok === false){
+      body.innerHTML = '<tr><td colspan="4" class="err">' + esc((data && data.error) || "读取失败") + "</td></tr>";
+      el("del-strategies").disabled = true;
+      return;
+    }
+    var unused = data.unused || [];
+    if(!unused.length){
+      body.innerHTML = '<tr><td colspan="4" class="muted">没有未使用的策略。</td></tr>';
+      el("del-strategies").disabled = true;
+      return;
+    }
+    el("del-strategies").disabled = false;
+    body.innerHTML = "";
+    unused.forEach(function(s){
+      var tr = document.createElement("tr");
+      var note = s.structural
+        ? '<span class="badge warn" title="detect 只看页面结构，不认域名，可能仍在为按格式的源抽正文">按页面结构识别</span>'
+        : '<span class="muted">没有订阅匹配</span>';
+      tr.innerHTML =
+        '<td class="pick"><input type="checkbox" class="strategy-pick" value="' + esc(s.name) + '"></td>' +
+        '<td class="name">' + esc(s.name) + '</td>' +
+        '<td class="url">' + esc(s.file) + '</td>' +
+        '<td>' + note + '</td>';
+      body.appendChild(tr);
+    });
+  }
+
+  function loadStrategies(){
+    fetch("/api/strategies").then(function(r){ return r.json(); }).then(renderStrategies)
+      .catch(function(e){
+        el("strategies-body").innerHTML =
+          '<tr><td colspan="4" class="err">加载失败：' + esc(e) + "</td></tr>";
+      });
+  }
+
+  el("strategy-all").addEventListener("change", function(){
+    var on = el("strategy-all").checked;
+    document.querySelectorAll(".strategy-pick").forEach(function(box){ box.checked = on; });
+  });
+
+  el("del-strategies").addEventListener("click", function(){
+    var picks = [].slice.call(document.querySelectorAll(".strategy-pick:checked"))
+      .map(function(box){ return box.value; });
+    var msg = el("strategy-msg");
+    if(!picks.length){ msg.textContent = "先勾选要删除的策略"; return; }
+    if(!confirm("确定删除这 " + picks.length + " 个策略文件？\n\n" + picks.join("\n") +
+        "\n\n删除后需要重启服务才生效；「按页面结构识别」的策略可能仍在为按格式的源抽正文。")){
+      return;
+    }
+    var btn = el("del-strategies");
+    btn.disabled = true;
+    msg.textContent = "正在删除…";
+    fetch("/api/strategies", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ action: "delete", names: picks })
+    }).then(function(r){ return r.json(); }).then(function(data){
+      msg.textContent = data.message || (data.ok ? "完成" : "失败");
+      renderStrategies(data);
+      if(data.need_restart){ msg.textContent += " · 请重启服务"; }
+    }).catch(function(e){
+      msg.textContent = "请求失败：" + e;
+    }).then(function(){ btn.disabled = false; });
+  });
 
   el("validate-btn").addEventListener("click", function(){ validateAll(); });
 
@@ -699,6 +804,7 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
   }
 
   load();
+  loadStrategies();
 })();
 </script>
 </body>

@@ -86,12 +86,36 @@ def strategy_domains(strategy):
         r"[a-z0-9-]+\.(?:com|cn|net|org|io|cc|me|dev|app|info|xyz|blog)\b", source))
 
 
-def resolve_strategy_for_feed(url, name=""):
-    """按订阅地址与名称判断归档时会用哪个专用策略，没有则返回 None
+def strategy_by_hint(hint):
+    """按订阅项里写的 "strategy" 找策略（认模块名、显示名，或模块名的开头）
+
+    只用于配置页展示与标题清理等「预先判断」，真实转换仍按页面结构检测。
+    """
+    text = (hint or "").strip().lower()
+    if not text:
+        return None
+    for strategy in _STRATEGIES:
+        module = strategy.__module__.rsplit(".", 1)[-1].lower()
+        if text in (strategy.name.lower(), module):
+            return strategy
+    for strategy in _STRATEGIES:
+        module = strategy.__module__.rsplit(".", 1)[-1].lower()
+        if module.startswith(text):
+            return strategy
+    return None
+
+
+def resolve_strategy_for_feed(url, name="", hint=""):
+    """按订阅地址、名称与人工标记判断归档时会用哪个专用策略，没有则返回 None
 
     规则与 resolve_strategy 一致（注册顺序 + 名称优先），只是拿不到文章 HTML，
-    因此用名称提示与网域做近似判断。
+    因此用名称提示与网域做近似判断。订阅项里写了 "strategy" 时以它为准
+    （如 "hexo" 指向 Hexo博客）。
     """
+    pinned = strategy_by_hint(hint)
+    if pinned is not None:
+        return pinned
+
     from urllib.parse import urlsplit
 
     host = (urlsplit(url or "").netloc or "").lower()

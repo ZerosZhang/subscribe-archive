@@ -87,6 +87,7 @@ D:\AgentCode\Project\「2026年10月28日」SSH 操作\ZerosServer连接与配�
     ├── watch_feeds.json         # 订阅检查的订阅列表（source=watch 时使用）
     ├── core/                    # 功能模块
     │   ├── utils.py             # 公共工具 + 路径常量（唯一事实来源）
+    │   ├── strategy_admin.py    # 策略清单与删除（配置页「未使用的策略」用）
     │   ├── watch_export.py      # 抓取 RSS/Atom 或站点列表页，判断更新（见 doc/watch_export.md）
     │   ├── save_webpages.py     # 下载原始 HTML 到 temp_data/raw/
     │   ├── waf.py               # openresty WAF 的 JS 挑战（换通行 Cookie，见 doc/waf.md）
@@ -242,9 +243,12 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - **HTML 与 CSS 分离**：`render_document()` 只输出内容 + `<link rel="stylesheet" href="../style.css">`（`STYLE_HREF`），没有内联 `<style>`；`BASE_CSS` 由 `write_style_sheet(page_dir)` 落到 `page_dir` 的**上一级**（数据根目录 `result/style.css`，内容一致时跳过写入、不动 mtime）。所有日期、所有页面共用这一份，改一处全体生效；代价是单独拷一个日期目录到 NAS 会掉样式（要连 `result/style.css` 一起带）
 - 新增来源：在 `src/strategies/` 新建文件 + `__init__.py` 按顺序导入
 - 标题尾部由主题追加的站点名由策略自己声明：`title_suffixes` + 基类 `clean_title()`（先 `html.unescape`，再把「分隔符 + 站点名」从末尾删掉，循环到稳定）；`convert_file` 用它清理页面标题，步骤 1 的 `check_feed` 也用它清理入库标题，保持文件名/索引/页面三处一致
-- `resolve_strategy_for_feed(url, name)`：配置页用的近似判断（拿不到文章 HTML），先按名称提示、再按 `strategy_domains()` 从 `detect()` 源码里提取的域名匹配；`strategy_domains()` 只服务展示，不参与真实转换
+- `resolve_strategy_for_feed(url, name, hint)`：配置页用的近似判断（拿不到文章 HTML），先按名称提示、再按 `strategy_domains()` 从 `detect()` 源码里提取的域名匹配；`hint` 是订阅项里的 `"strategy"` 字段（`strategy_by_hint()` 认模块名/显示名/模块名前缀），有则以此为准。`strategy_domains()` 只服务展示，不参与真实转换
 
 ### core/watch_export.py
+- 新订阅**默认「仅链接」**：`add_feed()` 写入订阅项时一律带 `"archive": false`（常量 `DEFAULT_FEED_ARCHIVE`），
+  只把标题与链接列进索引页，不下载原文、不渲染、不做 AI 摘要；要全文归档的源在 `src/watch_feeds.json` 里
+  显式写 `"archive": true`。缺字段的老订阅仍按 `feed.get("archive", True)` 处理（归档全文），不受影响
 - 有专用策略的源（`resolve_strategy_for_feed()` 命中）入库前用策略的 `clean_title()` 去掉标题尾部站点名
 - `list_trend_entries(limit=None, date=None, fallback_limit=30)`：索引页取「仅链接」订阅（`archive=false`）条目。
   `date` 命中当天 `first_seen` 的条目；**当天没抓到就回退为最近 `fallback_limit` 条并置 `fallback=True`**，
@@ -290,7 +294,7 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - **归档静态托管**：`GET /archive/<日期>/<相对路径>` 依次在 `OUTPUT_BASE_DIR` 与 `OUTPUT_BASE_DIR/"归档"` 下按扩展名返回 HTML/图片等（`Cache-Control: no-store`）；`_resolve_archive_file()` 拒绝 NUL/绝对路径/盘符/`..`，再用 `resolve()` + `is_relative_to()` 确认不越界，越界返回 404，只读不列目录
 - **执行日志页**：`GET /logs` 返回 `LOGS_PAGE`，整屏日志并每秒增量拉取 `/api/logs`；主页不再内嵌日志，标题右侧改为入口链接
 - **上次运行摘要**：`_run_worker` 结束时 `_save_last_run()` 原子写 `result/last_run.json`（`finished_at`/`date`/`articles`/`error`/`failures`/`step_times`），`GET /api/last` 读取（缺失或损坏返回 `{}`）；主页页头第二行展示，运行结束后自动刷新
-- **订阅配置页**：`GET /config` 返回 `CONFIG_PAGE`（`webui_page.py` 里的第二个页面常量），列出 `src/watch_feeds.json` 的订阅与检查状态；`GET /api/feeds` 汇总 `watch_export.list_feeds_state()`，`POST /api/feeds` 接受 `{"action":"add|remove","url":...}` 并调用 `watch_export.add_feed()/remove_feed()`（添加前先抓取校验，删除不清理 SQLite 中的历史条目）。`POST /api/discover` 调 `watch_export.discover_feeds()`，从任意网址找 feed（HTML 的 `<link rel="alternate">` 声明 → 常见路径 `/feed`、`/rss` 等，逐个实抓验证）。`feeds_payload()` 把依赖缺失收敛成 `error` 字段，缺 `feedparser` 时页面仍能打开
+- **订阅配置页**：`GET /config` 返回 `CONFIG_PAGE`（`webui_page.py` 里的第二个页面常量），列出 `src/watch_feeds.json` 的订阅与检查状态；`GET /api/feeds` 汇总 `watch_export.list_feeds_state()`，`POST /api/feeds` 接受 `{"action":"add|remove","url":...}` 并调用 `watch_export.add_feed()/remove_feed()`（添加前先抓取校验，删除不清理 SQLite 中的历史条目）。`POST /api/discover` 调 `watch_export.discover_feeds()`，从任意网址找 feed（HTML 的 `<link rel="alternate">` 声明 → 常见路径 `/feed`、`/rss` 等，逐个实抓验证）。`feeds_payload()` 把依赖缺失收敛成 `error` 字段，缺 `feedparser` 时页面仍能打开。配置页的订阅行会在「策略」列显示红色药丸「仅链接」（`archive: false`，此时不显示解析策略），页头提示新订阅默认仅链接；「策略」列没有专用策略时显示「按格式」；「状态」列看 `list_feeds_state()` 的 `last_update`/`update_days`（该源 `entries.first_seen` 的最大值），显示「N 天前更新」，≥30 天标红，不再显示上次检查时间。页面另有「未使用的解析策略」卡片：`GET /api/strategies` 列没有订阅匹配的策略（`core/strategy_admin.py`，结构型策略标「按页面结构识别」），`POST /api/strategies` `{"action":"delete","names":[...]}` 删除选中策略——服务端再校验一次「有订阅在用就拒绝」，先摘 `strategies/__init__.py` 导入再删 `.py`，失败回滚，删完需重启服务生效
 
 ### src/heatmap.py / src/core/notify.py
 - `heatmap.scan_daily_counts(base_dir)` 扫日期目录，按日期统计文章文件数（新 `.html` 与旧 `.md` 都认，索引页与 `assets/` 排除），纯标准库、无任何控件

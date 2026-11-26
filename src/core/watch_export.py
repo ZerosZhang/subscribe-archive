@@ -38,6 +38,11 @@ UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36")
 TIMEOUT = 20
 
+# 新订阅的默认归档方式：「仅链接」——只把标题与链接列进索引页，
+# 不下载原文、不渲染、不做 AI 摘要。要归档全文的源在 watch_feeds.json
+# 里显式写 "archive": true（老订阅没这个字段，仍按归档处理）
+DEFAULT_FEED_ARCHIVE = False
+
 
 def load_watch_feeds():
     """读取订阅列表，返回 [{"name":..., "url":...}]"""
@@ -312,7 +317,7 @@ def check_feed(conn, feed):
     modified = row["modified"] if row else None
 
     # 有专用策略的源，标题尾巴上的站点名由策略负责去掉（与渲染时同一套规则）
-    strategy = resolve_strategy_for_feed(url, name)
+    strategy = resolve_strategy_for_feed(url, name, feed.get("strategy") or "")
 
     def clean_title(text):
         return strategy.clean_title(text) if strategy else (text or "")
@@ -414,6 +419,17 @@ def check_feed(conn, feed):
     return articles, None, info
 
 
+def _days_since(text):
+    """把本地时间文本（YYYY-MM-DD HH:MM:SS）换算成距今天数，解析失败返回 None"""
+    if not text:
+        return None
+    try:
+        seen = datetime.strptime(str(text)[:19], "%Y-%m-%d %H:%M:%S").date()
+    except (TypeError, ValueError):
+        return None
+    return (datetime.now().date() - seen).days
+
+
 def list_feeds_state():
     """订阅列表 + 检查状态，供网页配置页展示"""
     conn = _connect()
@@ -425,10 +441,18 @@ def list_feeds_state():
             count = conn.execute(
                 "SELECT COUNT(*) FROM entries WHERE feed_url = ?", (url,)
             ).fetchone()[0]
+            # 最近一次抓到新条目的时间：看它离今天多久，能判断哪个源停更了
+            last_update = conn.execute(
+                "SELECT MAX(first_seen) FROM entries WHERE feed_url = ?", (url,)
+            ).fetchone()[0] or ""
             result.append({
                 "name": feed.get("name") or url,
                 "url": url,
+                "archive": feed.get("archive", True) is not False,
+                "strategy_hint": feed.get("strategy") or "",
                 "entries": count,
+                "last_update": last_update,
+                "update_days": _days_since(last_update),
                 "last_check": (row["last_check"] or "") if row else "",
                 "last_error": (row["last_error"] or "") if row else "",
                 "fail_count": row["fail_count"] if row else 0,
@@ -459,9 +483,10 @@ def add_feed(url):
         if not entries:
             return False, "没有取到条目"
         title = watcher.label(url)
-        feeds.append({"name": title, "url": url})
+        feeds.append({"name": title, "url": url,
+                      "archive": DEFAULT_FEED_ARCHIVE})
         _save_watch_feeds(feeds)
-        return True, f"已添加：{title}"
+        return True, f"已添加：{title}（仅链接，不下载总结）"
 
     status, payload, _, _ = fetch_feed(url, None, None)
     if status != "ok":
@@ -470,9 +495,10 @@ def add_feed(url):
     if not entries:
         return False, "该地址不是有效的 RSS/Atom 订阅源，也不在支持的站点列表里"
 
-    feeds.append({"name": feed_title or url, "url": url})
+    feeds.append({"name": feed_title or url, "url": url,
+                  "archive": DEFAULT_FEED_ARCHIVE})
     _save_watch_feeds(feeds)
-    return True, f"已添加：{feed_title or url}"
+    return True, f"已添加：{feed_title or url}（仅链接，不下载总结）"
 
 
 def remove_feed(url):
@@ -649,6 +675,7 @@ def export_articles(skip_auth_check=False, only_feed=None):
                 articles, failure = [], f"{name}: 异常 {exc}"
                 info = {"name": name, "url": feed["url"],
                         "archive": feed.get("archive", True) is not False,
+                "strategy_hint": feed.get("strategy") or "",
                         "status": "error", "new": 0, "entries": 0,
                         "error": f"异常 {exc}"}
                 print(f"  ✗ {failure}")
