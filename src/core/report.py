@@ -10,7 +10,7 @@
 设计要点：
 - 同一天重复执行时**按步骤合并**：跑了哪一步就覆盖哪一步的结果，没跑的不动
 - 索引页只读这个文件 + 文章列表 JSON，不再依赖本次运行的内存状态（--reindex 也能还原）
-- fetch 状态为失败时，索引页不再回退显示「最近 30 条」（见 failed_fetch_urls）
+- 索引页「仅链接」分组只列当天抓到的条目，不回退显示旧内容（见 failed_fetch_urls）
 """
 
 import json
@@ -120,7 +120,8 @@ def update_fetch(today, feed_results):
     """写入每个源的抓取结果
 
     feed_results: [{"name","url","archive","status","new","entries","error"}]
-    status: ok（有更新）/ not_modified（无更新）/ first_run（首次基线）/ error（失败）
+    status: ok（有更新，含首次检查）/ not_modified（无更新）/ error（失败）；
+    只有旧数据里还会出现 first_run（首次检查只记基线）
     """
     if not feed_results:
         return
@@ -161,7 +162,8 @@ def _apply_step(today, step_key, stats, notes, cleared=None):
     """
     data = load(today)
     for source, stat in (stats or {}).items():
-        feed = data["feeds"].setdefault(source, {"url": "", "archive": True})
+        key = _find_feed_key(data["feeds"], source) or source
+        feed = data["feeds"].setdefault(key, {"url": "", "archive": True})
         feed[step_key] = {
             "total": int(stat.get("total") or 0),
             "success": int(stat.get("success") or 0),
@@ -199,7 +201,7 @@ def notes(today):
 
 
 def failed_fetch_urls(today):
-    """当天抓取失败的订阅地址集合（索引页据此跳过该源的回退区块）"""
+    """当天抓取失败的订阅地址集合（索引页据此跳过该源的热榜分组）"""
     data = load(today)
     urls = set()
     for feed in (data.get("feeds") or {}).values():
@@ -222,8 +224,12 @@ def _status_of(feed):
 
     # 「当天累计新增」优先：同一天补刷返回 304 时不会把已抓到的成果显示成无更新
     articles = int(fetch.get("today", fetch.get("new") or 0) or 0)
+    entries = int(fetch.get("entries") or 0)
     if not feed.get("archive", True):
         # 仅链接的源（V2EX、知乎热榜）：抓到就算成功，没抓到算无更新
+        if status == "first_run" and not articles:
+            # 旧数据：首次检查的条目全部记在当天，按实际条数报（新数据首次检查已按正常更新处理）
+            articles = entries
         if articles:
             return "ok", f"获取成功（{articles} 条链接）", ""
         if status in ("not_modified", "ok"):
@@ -247,7 +253,10 @@ def _status_of(feed):
             return "partial", f"部分成功（{success}/{total}）", detail
         return "fail", f"全部失败（0/{total}）", detail
 
-    if status in ("not_modified", "first_run") or articles == 0:
+    if status == "first_run":
+        # 旧数据：当时首次检查只记基线、不归档也不下载，如实标出来
+        return "none", f"首次检查（{entries} 条基线）", ""
+    if status == "not_modified" or articles == 0:
         return "none", "无更新", ""
     return "unknown", f"待处理（{articles} 篇）", ""
 
@@ -263,6 +272,27 @@ def _step_detail(feed):
         if failed:
             parts.append(f"{label} {failed} 篇")
     return "、".join(parts)
+
+
+def _source_key(name):
+    """来源名的比对键
+
+    步骤 2 的统计用订阅名（如 `Blog | Yu Gao`），步骤 3 用成品文件名前缀（非法字符已清洗，
+    变成 `Blog Yu Gao`）。清洗后同名即视为同一个源，避免结果表出现两行。
+    """
+    from save_webpages import sanitize_filename
+    return sanitize_filename(name or "").strip().lower()
+
+
+def _find_feed_key(feeds, name):
+    """在 feeds 里按「原名 → 清洗后同名」找已有的源，找不到返回 None"""
+    if name in feeds:
+        return name
+    key = _source_key(name)
+    for existing in feeds:
+        if _source_key(existing) == key:
+            return existing
+    return None
 
 
 def feed_rows(today):
@@ -281,8 +311,21 @@ def feed_rows(today):
     except Exception:  # noqa: BLE001 - 订阅列表读不到也要能出表
         order = []
 
-    for index, name in enumerate(order + [n for n in feeds if n not in order]):
-        feed = feeds.get(name)
+    names = list(order)
+    order_keys = {_source_key(x) for x in order}
+    for name in feeds:
+        if _source_key(name) in order_keys:
+            continue
+        names.append(name)
+
+    used = set()
+    for index, name in enumerate(names):
+        key = _find_feed_key(feeds, name)
+        if key and key in used:
+            continue
+        if key:
+            used.add(key)
+        feed = feeds.get(key) if key else None
         if feed is None:
             rows.append({"name": name, "url": "", "kind": "unknown",
                          "label": "未检查", "detail": "", "_index": index})

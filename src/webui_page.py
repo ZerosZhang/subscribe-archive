@@ -486,6 +486,12 @@ table.feeds th{text-align:left;font-weight:normal;color:#57606a;font-size:12px;
 table.feeds td{border-bottom:1px solid #eaeef2;padding:8px;vertical-align:middle}
 table.feeds tr:last-child td{border-bottom:none}
 table.feeds .name{font-weight:600;white-space:nowrap}
+table.feeds .name-cell{white-space:nowrap}
+table.feeds .ops{white-space:nowrap}
+table.feeds .ops button+button{margin-left:6px}
+table.feeds .rename-input{width:180px;padding:4px 8px;font-size:13px}
+button.ghost{padding:6px 12px;font-size:13px}
+button.small{padding:4px 10px;font-size:13px;margin-left:6px}
 table.feeds .url{font-family:monospace;font-size:12px;
                  word-break:break-all;color:#57606a;min-width:220px}
 .table-scroll{overflow-x:auto}
@@ -614,13 +620,15 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
             ? '<span class="badge own">' + esc(feed.strategy) + '</span>'
             : '<span class="muted" title="没有专属策略，按页面结构匹配解析规则">按格式</span>');
       tr.innerHTML =
-        '<td class="name">' + esc(feed.name) +
+        '<td class="name-cell"><span class="name">' + esc(feed.name) + '</span>' +
           (feed.last_error ? '<span class="badge bad">异常</span>'
                            : '<span class="badge ok">正常</span>') + '</td>' +
         '<td class="url">' + esc(feed.url) + '</td>' +
         '<td>' + strategy + '</td>' +
         '<td class="status-cell">' + statusCell(feed) + '</td>' +
-        '<td><button class="danger" data-url="' + esc(feed.url) + '">删除</button></td>';
+        '<td class="ops"><button class="ghost" data-rename="' + esc(feed.url) + '"' +
+          ' data-name="' + esc(feed.name) + '">改名</button>' +
+          '<button class="danger" data-url="' + esc(feed.url) + '">删除</button></td>';
       body.appendChild(tr);
     });
     body.querySelectorAll("button[data-url]").forEach(function(btn){
@@ -630,6 +638,64 @@ h2 .validate{float:right;font-size:12px;padding:4px 10px;font-weight:normal}
         post({ action: "remove", url: url });
       });
     });
+    body.querySelectorAll("button[data-rename]").forEach(function(btn){
+      btn.addEventListener("click", function(){
+        startRename(btn);
+      });
+    });
+  }
+
+  // 行内改名：把名称列换成输入框 + 保存/取消
+  function startRename(btn){
+    var tr = btn.closest("tr");
+    var cell = tr.querySelector("td.name-cell");
+    var url = btn.getAttribute("data-rename");
+    var oldName = btn.getAttribute("data-name");
+    var badges = cell.querySelectorAll(".badge");
+    var badgeHtml = "";
+    badges.forEach(function(b){ badgeHtml += b.outerHTML; });
+
+    var input = document.createElement("input");
+    input.type = "text";
+    input.value = oldName;
+    input.className = "rename-input";
+    var save = document.createElement("button");
+    save.className = "primary small";
+    save.textContent = "保存";
+    var cancel = document.createElement("button");
+    cancel.className = "ghost small";
+    cancel.textContent = "取消";
+
+    cell.innerHTML = "";
+    cell.appendChild(input);
+    cell.appendChild(save);
+    cell.appendChild(cancel);
+
+    function restore(){
+      cell.innerHTML = '<span class="name">' + esc(oldName) + '</span>' + badgeHtml;
+      var again = document.createElement("button");
+      again.className = "ghost";
+      again.textContent = "改名";
+      again.setAttribute("data-rename", url);
+      again.setAttribute("data-name", oldName);
+      again.addEventListener("click", function(){ startRename(again); });
+      var ops = tr.querySelector("td.ops");
+      ops.replaceChild(again, ops.querySelector("button.ghost"));
+    }
+
+    save.addEventListener("click", function(){
+      var name = input.value.trim();
+      if(!name){ el("msg").textContent = "名称不能为空"; input.focus(); return; }
+      if(name === oldName){ restore(); return; }
+      post({ action: "rename", url: url, name: name });
+    });
+    cancel.addEventListener("click", restore);
+    input.addEventListener("keydown", function(ev){
+      if(ev.key === "Enter"){ save.click(); }
+      else if(ev.key === "Escape"){ restore(); }
+    });
+    input.focus();
+    input.select();
   }
 
   function load(){

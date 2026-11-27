@@ -296,6 +296,33 @@ def _save_feed_state(conn, url, title, etag, modified, error, fail_inc):
           1 if fail_inc else 0, 1 if fail_inc else 0))
 
 
+def _migrate_feed_state(conn, url, feed_title):
+    """同名源换过订阅地址时，把旧地址的条目与状态搬到新地址，返回迁移后的条目数
+
+    订阅地址一变，条目就是按 URL 存在库里的，新地址看起来像「首次检查」，
+    一整天的新条目只会被记成基线而不归档。这里用 feed 标题认回旧地址，
+    已存在的 guid 用 UPDATE OR IGNORE 跳过，然后把旧地址的行删掉。
+
+    只认「已经从 watch_feeds.json 里消失」的旧地址：同名但仍在订阅列表里的源
+    是另一个订阅（例如同站点的两个 feed），不能把它的历史条目抢过来。
+    """
+    if not feed_title:
+        return 0
+    active = {f["url"].strip() for f in load_watch_feeds() if f.get("url")}
+    old_urls = [row["url"] for row in conn.execute(
+        "SELECT url FROM feeds WHERE title = ? AND url != ?", (feed_title, url))
+        if row["url"] not in active]
+    for old_url in old_urls:
+        conn.execute("UPDATE OR IGNORE entries SET feed_url = ? WHERE feed_url = ?",
+                     (url, old_url))
+        conn.execute("DELETE FROM entries WHERE feed_url = ?", (old_url,))
+        conn.execute("DELETE FROM feeds WHERE url = ?", (old_url,))
+    conn.commit()
+    return conn.execute(
+        "SELECT COUNT(*) FROM entries WHERE feed_url = ?", (url,)
+    ).fetchone()[0]
+
+
 def check_feed(conn, feed):
     """检查单个订阅。返回 (新增文章列表, 失败原因, 状态信息)
 
@@ -305,7 +332,8 @@ def check_feed(conn, feed):
 
     状态信息供「当日结果」与索引页表格使用：
       {"name","url","archive","status","new","entries","error"}
-    status: ok（有更新）/ not_modified（无更新）/ first_run（首次基线）/ error（失败）
+    status: ok（有更新，含首次检查）/ not_modified（无更新）/ error（失败）
+    首次检查不再只记基线：当前 feed 里的条目全部按当天新增处理（该归档的归档，仅链接的列链接）
     """
     url = feed["url"].strip()
     name = feed.get("name") or url
@@ -360,6 +388,12 @@ def check_feed(conn, feed):
         "SELECT COUNT(*) FROM entries WHERE feed_url = ?", (url,)
     ).fetchone()[0]
     first_run = known == 0
+    if first_run:
+        previous = _migrate_feed_state(conn, url, feed_title)
+        if previous:
+            # 换过订阅地址：把旧地址的条目迁过来，本次照常当作更新处理
+            print(f"  ↺ {name}：订阅地址已变更，已沿用旧地址的 {previous} 条历史条目")
+            first_run = False
     # archive=false：只在日志里提示新条目，不交给后续归档步骤（如只想知道热榜有什么）
     do_archive = archive
     info["entries"] = len(entries)
@@ -373,7 +407,7 @@ def check_feed(conn, feed):
             VALUES (?, ?, ?, ?, ?, ?)
         """, (url, item["guid"], item["title"], item["link"],
               item["published"], stamp))
-        if cursor.rowcount and not first_run:
+        if cursor.rowcount:
             if not do_archive:
                 articles.append({"no_archive": True, **{
                     "title": clean_title(item["title"]) or "无标题",
@@ -393,29 +427,24 @@ def check_feed(conn, feed):
     _save_feed_state(conn, url, feed_title, new_etag, new_modified, None, False)
     conn.commit()
 
-    info["status"] = "first_run" if first_run else ("ok" if articles else "not_modified")
-    info["new"] = 0 if first_run else len(articles)
+    info["status"] = "ok" if articles else "not_modified"
+    info["new"] = len(articles)
 
     if not do_archive:
         articles = [a for a in articles if a.pop("no_archive", False)]
-        if first_run:
-            print(f"  ◐ {name}：首次检查，记录 {len(entries)} 条为基线（不归档）")
-        elif articles:
-            print(f"  ✓ {name}：{len(articles)} 条更新（仅提示，不归档）")
-            for item in sorted(articles, key=lambda a: a["published"], reverse=True):
-                print(f"      - {item['published']} {item['title']}")
-        else:
-            print(f"  · {name}：无更新")
-        return [], None, info
 
     if first_run:
-        print(f"  ◐ {name}：首次检查，记录 {len(entries)} 条为基线（不当作更新）")
+        head = f"  ◐ {name}：首次检查，{len(articles)} 条全部列为当天新增"
     elif articles:
-        print(f"  ✓ {name}：{len(articles)} 条更新")
-        for article in sorted(articles, key=lambda a: a["published"], reverse=True):
-            print(f"      - {article['published']} {article['title']}")
+        head = f"  ✓ {name}：{len(articles)} 条更新" + ("（仅提示，不归档）" if not do_archive else "")
     else:
-        print(f"  · {name}：无更新")
+        head = f"  · {name}：无更新"
+    print(head)
+    for article in sorted(articles, key=lambda a: a["published"], reverse=True):
+        print(f"      - {article['published']} {article['title']}")
+
+    if not do_archive:
+        return [], None, info
     return articles, None, info
 
 
@@ -512,6 +541,33 @@ def remove_feed(url):
     return True, "已删除"
 
 
+def rename_feed(url, new_name):
+    """改名（订阅的显示名 = 索引页表头与成品文件名前缀）。返回 (ok, 消息)
+
+    只改 watch_feeds.json 的 name，不动状态库：条目仍按 url 去重，
+    已归档的历史文件保持原名。
+    """
+    url = (url or "").strip()
+    name = (new_name or "").strip()
+    if not name:
+        return False, "名称不能为空"
+    if len(name) > 60:
+        return False, "名称请控制在 60 个字符以内"
+    feeds = load_watch_feeds()
+    target = next((f for f in feeds if f["url"].strip() == url), None)
+    if target is None:
+        return False, "订阅列表里没有这个地址"
+    for feed in feeds:
+        if feed is not target and (feed.get("name") or feed["url"].strip()).strip() == name:
+            return False, f"已有同名订阅：{name}"
+    old = (target.get("name") or url).strip()
+    if old == name:
+        return True, "名称未变"
+    target["name"] = name
+    _save_watch_feeds(feeds)
+    return True, f"已改名：{old} → {name}"
+
+
 def validate_feeds():
     """逐条检测订阅链接是否可用（只读，不写状态库）
 
@@ -564,12 +620,11 @@ def validate_feeds():
     return results
 
 
-def list_trend_entries(limit=None, date=None, fallback_limit=30):
+def list_trend_entries(limit=None, date=None):
     """列出「仅链接」订阅（archive=false）的条目
 
-    date 传入 "YYYY年MM月DD日" 时只取该日抓到的条目；该日没有则回退为最近
-    fallback_limit 条，并把该组标记 fallback=True（索引页据此提示不是当日条目）。
-    limit 为 None 时返回全部条目。
+    date 传入 "YYYY年MM月DD日" 时只取该日抓到的条目；当天没抓到就返回空列表，
+    索引页整段不显示（不回退旧的「最近 N 条」）。limit 为 None 时返回全部条目。
     """
     limit_sql = "" if limit is None else "LIMIT ?"
     limit_args = () if limit is None else (limit,)
@@ -581,7 +636,6 @@ def list_trend_entries(limit=None, date=None, fallback_limit=30):
             if feed.get("archive", True) is not False:
                 continue
             url = feed["url"].strip()
-            rows = []
             if date:
                 # first_seen 形如 "2026-11-13 08:00:00"
                 prefix = (date.replace("年", "-").replace("月", "-").replace("日", "")) + "%"
@@ -594,25 +648,19 @@ def list_trend_entries(limit=None, date=None, fallback_limit=30):
                     """,
                     (url, prefix, *limit_args),
                 ).fetchall()
-            fallback = False
-            if not rows:
-                # 当天没抓到：回退为最近的几条，绝不能把全部历史都倒进索引页
-                fallback = bool(date)
-                fallback_sql = limit_sql or "LIMIT ?"
-                fallback_args = limit_args or (fallback_limit,)
+            else:
                 rows = conn.execute(
                     f"""
                     SELECT title, link, published FROM entries
                     WHERE feed_url = ?
                     ORDER BY published DESC, id DESC
-                    {fallback_sql}
+                    {limit_sql}
                     """,
-                    (url, *fallback_args),
+                    (url, *limit_args),
                 ).fetchall()
             result.append({
                 "name": feed.get("name") or url,
                 "url": url,
-                "fallback": fallback,
                 "entries": [{"title": row["title"], "link": row["link"],
                              "published": row["published"]} for row in rows],
             })

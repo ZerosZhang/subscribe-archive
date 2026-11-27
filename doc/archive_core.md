@@ -87,7 +87,7 @@ run_archive(selected_steps, today, log, on_progress=None, should_stop=None,
 - 步骤 4 **断点续跑**：已有摘要的文章跳过（不调 API），只补没有摘要的那几篇；`force=True` 才全部重算
 - 步骤 4 生成 `result/<日期>/YYYY年MM月DD日.html` 索引页，结构为「顶部订阅结果表 → 按来源分组（篇数降序 + 中文序号）→ 仅链接热榜」，右侧是 `position: sticky` 的悬浮目录（窄屏自动隐藏）；文章链接带 `target="_blank"`，**在新标签页打开**，避免从总览跳转时覆盖当前页面
 - 顶部**订阅结果表**读 `report.feed_rows(today)`：每源一行，结果分「获取更新失败 / 全部失败 / 部分成功（n/m）/ 全部成功（m）/ 获取成功（m 条链接）/ 无更新 / 未检查」，说明列写逐工序失败篇数（如「下载失败 2 篇、摘要失败 1 篇」）；当天完全没有抓取记录时不画表格
-- 仅链接热榜（`archive=false`）**当天抓取失败的源整段跳过**（`report.failed_fetch_urls()`），不再回退显示「最近 30 条」旧内容
+- 仅链接热榜（`archive=false`）**只列当天抓到的条目**：当天没抓到（或抓取失败，`report.failed_fetch_urls()`）的源整段不显示，不回退显示「最近 30 条」旧内容
 - **索引页只依赖本地文件**（当日结果 JSON + 文章列表 JSON + 成品 HTML），因此 `--reindex` 生成的页面与当天跑出来的一致
 - 索引页同样**只放内容**：`_write_index_page()` 调 `render_document()` 外链 `../style.css`，并调 `write_style_sheet()` 把样式落到数据根目录 `result/style.css`（与所有日期的文章页共用同一份样式表）
 - **索引页以文章列表 JSON 为准**：`_build_index_entries()` 逐条遍历 `result/temp_data/「日期」.json`，用 `_expected_filename()`（`「{sanitize_filename(feed_title)}」{sanitize_filename(title)}.html`，与步骤 2 命名规则一致）推出期望文件名 → **JSON 有多少条，索引页就列多少条**；匹配时先精确命中，未命中再用 `_normalize_filename()`（去掉 `_1` 后缀）宽松匹配；目录中不在 JSON 里的成品文件也会补列，避免历史数据被漏掉

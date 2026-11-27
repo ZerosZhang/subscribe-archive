@@ -100,7 +100,7 @@
 | POST | `/api/run` | body `{"steps":[1,2,3,4], "date":"YYYY年MM月DD日"}` → `{ok, error}` |
 | POST | `/api/stop` | 请求停止当前运行 → `{ok}` |
 | POST | `/api/read` | body `{"date":"YYYY年MM月DD日", "read":true|false}` → `{ok, error}` |
-| POST | `/api/feeds` | body `{"action":"add|remove", "url":"..."}` → `{ok, message, feeds}` |
+| POST | `/api/feeds` | body `{"action":"add|remove|rename", "url":"...", "name":"..."}` → `{ok, message, feeds}`；`rename` 只改 `watch_feeds.json` 的 name，空名/超 60 字/重名拒绝 |
 | POST | `/api/validate` | 逐条检测订阅链接 → `{ok, results:[{name,url,ok,status,entries,error,seconds}]}`（只读，不写状态库） |
 | POST | `/api/discover` | body `{"url":"..."}` → `{ok, candidates:[{url,title}], error}`；从任意网址找可用 feed |
 

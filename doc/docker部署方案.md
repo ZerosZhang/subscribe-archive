@@ -156,7 +156,7 @@ docker exec -it subscribe-archive python /app/src/webui.py --host 0.0.0.0
 
 验证点：
 
-1. 步骤 1 输出「首次检查，记录 N 条为基线」
+1. 步骤 1 输出「首次检查，N 条全部列为当天新增」
 2. 步骤 2/3 生成 `result/<日期>/` 与 `assets/`
 3. 步骤 4 生成摘要与当天索引页
 

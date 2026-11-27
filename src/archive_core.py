@@ -425,20 +425,17 @@ def _write_index_page(today, index_path, entries):
 
     next_index = len(sorted_sources)
     for feed in trend_feeds:
-        # 当天抓取失败的源直接跳过：不再回退显示「最近 N 条」旧内容
+        # 当天没抓到（或抓取失败）的源整段不显示，绝不回退显示旧内容
         if feed.get("url") in failed_urls:
             continue
         if not feed.get("entries"):
             continue
         num = chinese_nums[next_index] if next_index < len(chinese_nums) else str(next_index + 1)
         anchor = f"trend-{next_index + 1}"
-        suffix = "仅链接"
-        if feed.get("fallback"):
-            suffix = f"当日未抓到，以下为最近 {len(feed['entries'])} 条"
         toc_items.append((anchor, feed["name"], f"{len(feed['entries'])} 条"))
         body.append(
             f'<h2 class="index-source" id="{anchor}">{num}、{html_escape(feed["name"])}'
-            f'（{len(feed["entries"])} 条 · {suffix}）</h2>'
+            f'（{len(feed["entries"])} 条 · 仅链接）</h2>'
         )
         body.append('<ul class="index-list">')
         for item in feed["entries"]:

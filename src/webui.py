@@ -896,13 +896,15 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/feeds":
             action = body.get("action")
             url = body.get("url")
-            from watch_export import add_feed, remove_feed
+            from watch_export import add_feed, remove_feed, rename_feed
             if action == "add":
                 ok, message = add_feed(url)
             elif action == "remove":
                 ok, message = remove_feed(url)
+            elif action == "rename":
+                ok, message = rename_feed(url, body.get("name"))
             else:
-                ok, message = False, "action 应为 add 或 remove"
+                ok, message = False, "action 应为 add、remove 或 rename"
             return self._send_json({"ok": ok, "message": message,
                                     "feeds": feeds_payload()["feeds"]})
         if path == "/api/strategies":

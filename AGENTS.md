@@ -177,10 +177,10 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 | 3 | convert | 策略识别 + 清洗，渲染为干净 HTML（图片本地化到 `assets/`）。对 raw 目录逐个重渲染，本就覆盖写；**图片默认复用 assets/ 里已有的（按 URL 摘要同名跳过），`--refresh` 才重下** |
 | 4 | summarize | AI 生成文章摘要并注入 HTML，生成当日索引页。**断点续跑：已有摘要的文章跳过（不调 API，直接复用），只补没摘要的那几篇**；`_summarize_step(..., force=True)` 才全部重算。索引页**以 `temp_data/「日期」.json` 的条目为准**（JSON 多少条就列多少条）；下载/渲染/摘要失败的条目在页内标注（无成品 HTML 时标题直链原文 URL） |
 
-索引页 = **顶部订阅结果表**（每源：获取更新失败 / 全部失败 / 部分成功 n/m / 全部成功 m / 无更新 / 未检查 + 逐工序失败篇数）
+索引页 = **顶部订阅结果表**（每源：获取更新失败 / 全部失败 / 部分成功 n/m / 全部成功 m / 获取成功 n 条链接 / 无更新 / 首次检查 / 未检查 + 逐工序失败篇数）
 + 按来源分组的正文 + 仅链接热榜，右侧是 `position: sticky` 的悬浮目录（窄屏隐藏）。
 数据全部来自本地文件（`「日期」result.json` + 文章列表 JSON + 成品 HTML），**不联网、不看运行态**：
-「仅链接」源当天抓取失败时整段跳过（不再回退显示最近 30 条），`--reindex` 生成的页面与当天一致。
+「仅链接」源只列当天抓到的条目，当天没抓到（或抓取失败）时整段不显示，`--reindex` 生成的页面与当天一致。
 
 **同一天重跑**：复用列表（步骤 1 跳过）→ **只补缺失的原始 HTML**（步骤 2，已下的跳过）→ 重渲染（步骤 3，图片已在本地的直接复用）→ 摘要**跳过已成功的、只补失败的** + 重建索引页（步骤 4）。重跑几乎不再产生下载流量；确实要重抓页面/图片时加 `--refresh`。当日结果文件按步骤合并：跑过的步骤覆盖对应统计、没跑的不动，本次成功的文件会清掉旧的失败标注；日志按执行分段追加到 `result/logs/<日期>.log`。
 
@@ -250,10 +250,14 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
   只把标题与链接列进索引页，不下载原文、不渲染、不做 AI 摘要；要全文归档的源在 `src/watch_feeds.json` 里
   显式写 `"archive": true`。缺字段的老订阅仍按 `feed.get("archive", True)` 处理（归档全文），不受影响
 - 有专用策略的源（`resolve_strategy_for_feed()` 命中）入库前用策略的 `clean_title()` 去掉标题尾部站点名
-- `list_trend_entries(limit=None, date=None, fallback_limit=30)`：索引页取「仅链接」订阅（`archive=false`）条目。
-  `date` 命中当天 `first_seen` 的条目；**当天没抓到就回退为最近 `fallback_limit` 条并置 `fallback=True`**，
-  索引页把标题写成「当日未抓到，以下为最近 N 条」。`limit=None` 表示不限条数（索引页就是这么调的，
-  只要该日抓了 50 条就列 50 条），回退查询永远带上限，避免某天抓取失败时把全部历史都倒进索引页
+- `list_trend_entries(limit=None, date=None)`：索引页取「仅链接」订阅（`archive=false`）条目。
+  `date` 命中当天 `first_seen` 的条目；**当天没抓到就返回空列表，索引页整段不显示**
+  （不回退旧的「最近 N 条」）。`limit=None` 表示不限条数（索引页就是这么调的，只要该日抓了 50 条就列 50 条）
+- **首次检查不再只记基线**：当前 feed 里的条目全部按当天新增处理（归档源照常下载/渲染/摘要，仅链接源全部列进索引页，当天算未读）。副作用是刚添加一个条目很多的源会一次性归档一整批，不想这样就先给它设 `"archive": false`
+- **订阅地址变更沿用历史**：`first_run` 判定前先 `_migrate_feed_state()`——按 feed 标题找回
+  **已从订阅列表消失**的同名旧地址的条目与状态，`UPDATE OR IGNORE` 迁到新地址后删旧行
+  （同名但仍在订阅列表里的源算另一个订阅，不迁移）。否则改一次 URL 就会被当成新订阅，
+  整份内容再归档一遍（11-27 的 36氪、少数派 Matrix 就是这么丢了一天）
 
 ### core/summarize.py
 - `process_article(client, model, html_file, date, force=False)` **默认断点续跑**：先看 `data-folo="summary"` 区块里有没有非空文本，有就直接复用、不调 API（返回带 `skipped=True`）；`force=True` 才重新生成。已有摘要时 `write_summary_to_html` 先清旧内容再写；失败仍返回 `success=False` 与错误原因
@@ -294,7 +298,7 @@ PYTHONPATH="src/core;src" .venv/Scripts/python.exe src/heatmap.py
 - **归档静态托管**：`GET /archive/<日期>/<相对路径>` 依次在 `OUTPUT_BASE_DIR` 与 `OUTPUT_BASE_DIR/"归档"` 下按扩展名返回 HTML/图片等（`Cache-Control: no-store`）；`_resolve_archive_file()` 拒绝 NUL/绝对路径/盘符/`..`，再用 `resolve()` + `is_relative_to()` 确认不越界，越界返回 404，只读不列目录
 - **执行日志页**：`GET /logs` 返回 `LOGS_PAGE`，整屏日志并每秒增量拉取 `/api/logs`；主页不再内嵌日志，标题右侧改为入口链接
 - **上次运行摘要**：`_run_worker` 结束时 `_save_last_run()` 原子写 `result/last_run.json`（`finished_at`/`date`/`articles`/`error`/`failures`/`step_times`），`GET /api/last` 读取（缺失或损坏返回 `{}`）；主页页头第二行展示，运行结束后自动刷新
-- **订阅配置页**：`GET /config` 返回 `CONFIG_PAGE`（`webui_page.py` 里的第二个页面常量），列出 `src/watch_feeds.json` 的订阅与检查状态；`GET /api/feeds` 汇总 `watch_export.list_feeds_state()`，`POST /api/feeds` 接受 `{"action":"add|remove","url":...}` 并调用 `watch_export.add_feed()/remove_feed()`（添加前先抓取校验，删除不清理 SQLite 中的历史条目）。`POST /api/discover` 调 `watch_export.discover_feeds()`，从任意网址找 feed（HTML 的 `<link rel="alternate">` 声明 → 常见路径 `/feed`、`/rss` 等，逐个实抓验证）。`feeds_payload()` 把依赖缺失收敛成 `error` 字段，缺 `feedparser` 时页面仍能打开。配置页的订阅行会在「策略」列显示红色药丸「仅链接」（`archive: false`，此时不显示解析策略），页头提示新订阅默认仅链接；「策略」列没有专用策略时显示「按格式」；「状态」列看 `list_feeds_state()` 的 `last_update`/`update_days`（该源 `entries.first_seen` 的最大值），显示「N 天前更新」，≥30 天标红，不再显示上次检查时间。页面另有「未使用的解析策略」卡片：`GET /api/strategies` 列没有订阅匹配的策略（`core/strategy_admin.py`，结构型策略标「按页面结构识别」），`POST /api/strategies` `{"action":"delete","names":[...]}` 删除选中策略——服务端再校验一次「有订阅在用就拒绝」，先摘 `strategies/__init__.py` 导入再删 `.py`，失败回滚，删完需重启服务生效
+- **订阅配置页**：`GET /config` 返回 `CONFIG_PAGE`（`webui_page.py` 里的第二个页面常量），列出 `src/watch_feeds.json` 的订阅与检查状态；`GET /api/feeds` 汇总 `watch_export.list_feeds_state()`，`POST /api/feeds` 接受 `{"action":"add|remove|rename","url":...,"name":...}` 并调用 `watch_export.add_feed()/remove_feed()/rename_feed()`（添加前先抓取校验，删除不清理 SQLite 中的历史条目；改名只改 `watch_feeds.json` 的 name，空名/超 60 字/重名一律拒绝，历史成品文件保持原名）。`POST /api/discover` 调 `watch_export.discover_feeds()`，从任意网址找 feed（HTML 的 `<link rel="alternate">` 声明 → 常见路径 `/feed`、`/rss` 等，逐个实抓验证）。`feeds_payload()` 把依赖缺失收敛成 `error` 字段，缺 `feedparser` 时页面仍能打开。配置页的订阅行会在「策略」列显示红色药丸「仅链接」（`archive: false`，此时不显示解析策略），页头提示新订阅默认仅链接；「策略」列没有专用策略时显示「按格式」；「状态」列看 `list_feeds_state()` 的 `last_update`/`update_days`（该源 `entries.first_seen` 的最大值），显示「N 天前更新」，≥30 天标红，不再显示上次检查时间。页面另有「未使用的解析策略」卡片：`GET /api/strategies` 列没有订阅匹配的策略（`core/strategy_admin.py`，结构型策略标「按页面结构识别」），`POST /api/strategies` `{"action":"delete","names":[...]}` 删除选中策略——服务端再校验一次「有订阅在用就拒绝」，先摘 `strategies/__init__.py` 导入再删 `.py`，失败回滚，删完需重启服务生效
 
 ### src/heatmap.py / src/core/notify.py
 - `heatmap.scan_daily_counts(base_dir)` 扫日期目录，按日期统计文章文件数（新 `.html` 与旧 `.md` 都认，索引页与 `assets/` 排除），纯标准库、无任何控件

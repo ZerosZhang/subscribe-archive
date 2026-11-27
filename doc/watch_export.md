@@ -35,9 +35,11 @@
 - 每次 `export_articles()` 结束都会把本次检查的失败源写入 `result/temp_data/last_check.json`（`{checked_at, failures:[{name,url,error}]}`），网页版据此在首页提示
 - 抓取失败/成功都会 `conn.commit()`：失败时 `feeds.last_error`、`fail_count`、`last_check` 会当场落库（旧版本失败分支漏了提交，导致配置页的「连续 N 次」不涨）
 - `validate_feeds()`：逐条实抓校验订阅链接（只读，不改 ETag/状态），网页版「订阅配置 → 检测链接」和 `python src/core/watch_export.py --validate` 都调用它
-- 订阅项可加 `"archive": false`：仍然检查更新，但不交给后续下载/渲染步骤；每日索引页会把它们编成「十、知乎热榜（仅链接）」这样的分组接在正文分组之后，只有标题和原文链接（`list_trend_entries(date=...)` 取当天抓到的条目，没有则回退最新若干条）。**当天抓取失败的源，索引页直接跳过整个分组**（不再回退显示旧内容），失败原因写进顶部结果表
+- `rename_feed(url, new_name)`：改订阅的显示名（= 索引页表头与成品文件名前缀），只写 `watch_feeds.json` 的 `name`，条目仍按 url 去重、历史文件保持原名；空名、超 60 字、与别的订阅重名都拒绝。配置页每行的「改名」按钮走 `POST /api/feeds {"action":"rename"}`
+- 订阅项可加 `"archive": false`：仍然检查更新，但不交给后续下载/渲染步骤；每日索引页会把它们编成「六、知乎热榜（仅链接）」这样的分组接在正文分组之后，只有标题和原文链接（`list_trend_entries(date=...)` 只取当天抓到的条目，**当天没抓到就整段不显示，不回退旧内容**）。当天抓取失败的源同样跳过整个分组，失败原因写进顶部结果表
 - **新订阅默认「仅链接」**：`add_feed()` 追加的订阅项一律带 `"archive": false`（常量 `DEFAULT_FEED_ARCHIVE`），只提供标题与链接、不下载原文也不做 AI 摘要；要全文归档的源在 `watch_feeds.json` 里显式写 `"archive": true`。缺这个字段的老订阅沿用 `feed.get("archive", True)` 的旧语义（按归档处理），不受这条默认值影响
-- 首次检查某个源时**只记基线、不当作更新**，避免第一次就把历史文章全部归档
+- 首次检查某个源时**不再只记基线**：当前 feed 里的条目全部按当天新增处理——归档源照常下载/渲染/摘要，仅链接源全部列进索引页（当天为未读）。想避免把历史文章全抓一遍，就先别急着添加源，或给它加 `"archive": false`
+- **订阅地址变更**：`check_feed()` 判定首次检查前先调 `_migrate_feed_state()`，按 feed 标题找回**已从 `watch_feeds.json` 消失**的同名旧地址的 `entries`/`feeds` 行迁到新地址（`UPDATE OR IGNORE` 去重后删旧行）。同名但仍在订阅列表里的源算另一个订阅，不参与迁移。不做这步的话，改一次 URL 就等于换了个新订阅，整份内容会被当成新增再归档一遍
 - 遇到 openresty WAF 的 JS 挑战页（如零度博客的 `/feed`）自动换通行 Cookie 后重取，见 `doc/waf.md`
 - 有专用策略的来源（`resolve_strategy_for_feed()` 命中）会在入库前用策略的 `clean_title()` 去掉标题尾部的站点名，与渲染时同一套规则
 - 订阅项可加 `"strategy": "<策略>"` 手工标注实际命中的策略（认模块名 `hexo_blog`、显示名 `Hexo博客`，也认模块名前缀 `hexo`）。它只影响配置页「策略」列的展示与 `clean_title()` 的选取，**不改变真实转换**——转换时仍按页面结构 `detect()` 匹配，写错了不会套错策略，只是显示不准
